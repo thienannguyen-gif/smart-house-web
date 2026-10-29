@@ -1,0 +1,1673 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>body{margin:0}[hidden]{display:none!important}</style>
+<title>Nhà IoT 3 Tầng</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600&family=JetBrains+Mono:wght@400;500&family=Lexend:wght@500;600;700&display=swap">
+<style>
+/* Layout: mặt cắt ngôi nhà 3 tầng (mái → tầng 3 → tầng 2 → tầng 1 → nền đất) bên trái, cột cảm biến + nhật ký bên phải */
+:root{
+  --paper:#EDF1F0; --surface:#FBFCFC; --tile:#F2F5F4; --ink:#14302F; --muted:#5A716F; --line:#CCD8D6;
+  --wall:#1F4644; --accent:#1C6E68; --accent-ink:#FFFFFF;
+  --amber:#C98316; --amber-soft:#FBEBCB; --ok:#23845A; --ok-soft:#DDF1E6; --danger:#C23E2C; --danger-soft:#FBE1DC;
+  --font-display:"Lexend", "Be Vietnam Pro", system-ui, sans-serif;
+  --font-body:"Be Vietnam Pro", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono:"JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --paper:#0D1817; --surface:#132322; --tile:#192C2A; --ink:#E2ECEA; --muted:#8EA5A2; --line:#2A403E;
+    --wall:#6C9A95; --accent:#5BC0B5; --accent-ink:#06201E;
+    --amber:#F2B24C; --amber-soft:#3A2D14; --ok:#4FC38B; --ok-soft:#14352A; --danger:#F06A55; --danger-soft:#3E1B16;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#0D1817; --surface:#132322; --tile:#192C2A; --ink:#E2ECEA; --muted:#8EA5A2; --line:#2A403E;
+  --wall:#6C9A95; --accent:#5BC0B5; --accent-ink:#06201E;
+  --amber:#F2B24C; --amber-soft:#3A2D14; --ok:#4FC38B; --ok-soft:#14352A; --danger:#F06A55; --danger-soft:#3E1B16;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{background:var(--paper);color:var(--ink);font-family:var(--font-body);font-size:15px;line-height:1.5}
+.app{max-width:1180px;margin:0 auto;padding-block:20px 40px;padding-left:max(16px, env(safe-area-inset-left, 0px));padding-right:max(16px, env(safe-area-inset-right, 0px));display:flex;flex-direction:column;gap:20px}
+h1,h2,h3{font-family:var(--font-display);text-wrap:balance;margin:0}
+button{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+/* Header */
+.top{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px 20px}
+.brand h1{font-size:1.55rem;font-weight:700;letter-spacing:-.01em}
+.brand p{margin:2px 0 0;color:var(--muted);font-size:.86rem}
+.top-actions{display:flex;flex-wrap:wrap;align-items:center;gap:10px}
+.pill{display:inline-flex;align-items:center;gap:8px;padding:6px 12px;border-radius:999px;border:1px solid var(--line);background:var(--surface);font-size:.82rem;font-weight:500;white-space:nowrap}
+.pill i{width:8px;height:8px;border-radius:50%;background:var(--muted)}
+.pill[data-s="sim"] i{background:var(--amber)}
+.pill[data-s="live"] i{background:var(--ok);box-shadow:0 0 0 3px var(--ok-soft)}
+.pill[data-s="wait"] i{background:var(--accent);animation:blink 1s infinite}
+.pill[data-s="off"] i{background:var(--danger)}
+@keyframes blink{50%{opacity:.25}}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--surface)}
+.seg button{border:0;background:transparent;padding:8px 14px;cursor:pointer;font-size:.88rem;font-weight:500}
+.seg button[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink)}
+
+/* Connect panel */
+.connect{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:18px;display:grid;gap:14px}
+.connect h2{font-size:1.05rem}
+.connect p{margin:0;color:var(--muted);font-size:.88rem;max-width:70ch}
+.form-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}
+.field{display:grid;gap:4px;min-width:0}
+.field label{font-size:.78rem;font-weight:600;color:var(--muted);letter-spacing:.02em}
+.field input{width:100%;padding:9px 11px;border-radius:8px;border:1px solid var(--line);background:var(--tile);color:var(--ink);font:inherit;font-size:.9rem}
+.field input.mono{font-family:var(--font-mono);font-size:.8rem}
+details summary{cursor:pointer;font-size:.86rem;font-weight:500;color:var(--accent)}
+details .form-grid{margin-top:10px}
+.form-actions{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.btn{border:1px solid var(--line);background:var(--tile);padding:8px 14px;border-radius:8px;cursor:pointer;font-size:.88rem;font-weight:500}
+.btn:hover:not(:disabled){border-color:var(--accent)}
+.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.err{color:var(--danger);font-size:.86rem;margin:0}
+
+/* Main grid */
+.main{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:24px;align-items:start}
+@media (max-width:900px){.main{grid-template-columns:minmax(0,1fr)}}
+
+/* House section */
+.house{display:flex;flex-direction:column;min-width:0}
+.roof{height:58px;margin:0 -12px;background:var(--wall);clip-path:polygon(50% 0,100% 100%,0 100%);position:relative}
+.floor{display:grid;grid-template-columns:44px minmax(0,1fr);gap:14px;background:var(--surface);border:6px solid var(--wall);border-top:0;padding:16px 16px 18px 10px}
+.floor.first{border-top:6px solid var(--wall)}
+.floor-label{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;border-right:1px dashed var(--line);padding-right:10px}
+.floor-label b{font-family:var(--font-display);font-size:1.9rem;line-height:1;font-weight:700;color:var(--wall)}
+.floor-label span{font-size:.66rem;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);writing-mode:vertical-rl;transform:rotate(180deg)}
+.tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:12px;min-width:0}
+.ground{height:16px;margin:0 -12px;border-top:3px solid var(--wall);background:repeating-linear-gradient(135deg,var(--wall) 0 1.5px,transparent 1.5px 8px)}
+@media (max-width:520px){
+  .floor{grid-template-columns:minmax(0,1fr);padding:12px}
+  .floor-label{flex-direction:row;justify-content:flex-start;border-right:0;border-bottom:1px dashed var(--line);padding:0 0 8px}
+  .floor-label b{font-size:1.3rem}
+  .floor-label span{writing-mode:horizontal-tb;transform:none}
+  .tiles{grid-template-columns:minmax(0,1fr)}
+}
+
+/* Tiles */
+.tile{background:var(--tile);border:1px solid var(--line);border-radius:10px;padding:12px 12px 10px;display:flex;flex-direction:column;gap:6px;min-width:0;transition:background .25s,border-color .25s,box-shadow .25s}
+.tile header{display:flex;align-items:center;gap:8px}
+.tile h3{font-size:.95rem;font-weight:600}
+.lamp{width:12px;height:12px;border-radius:50%;flex:none;border:2px solid var(--muted);background:transparent;transition:all .25s}
+.state{margin:0;font-weight:600;font-size:.88rem}
+.hint{margin:0;color:var(--muted);font-size:.78rem}
+.ctrl{display:flex;flex-direction:column;gap:8px;margin-top:auto;padding-top:4px}
+.ctrl:empty{display:none}
+.path{font-family:var(--font-mono);font-size:.68rem;color:var(--muted);overflow-wrap:anywhere}
+.tile.lit{background:var(--amber-soft);border-color:var(--amber)}
+.tile.lit .lamp{background:var(--amber);border-color:var(--amber);box-shadow:0 0 0 4px color-mix(in srgb,var(--amber) 30%,transparent),0 0 14px var(--amber)}
+.tile.lit .state{color:var(--amber)}
+.tile.open{background:var(--ok-soft);border-color:var(--ok)}
+.tile.open .lamp{background:var(--ok);border-color:var(--ok)}
+.tile.open .state{color:var(--ok)}
+.tile.armed .lamp{background:var(--accent);border-color:var(--accent)}
+.tile.alert{background:var(--danger-soft);border-color:var(--danger);animation:pulse 1s infinite}
+.tile.alert .lamp{background:var(--danger);border-color:var(--danger)}
+.tile.alert .state{color:var(--danger)}
+@keyframes pulse{50%{box-shadow:0 0 0 4px color-mix(in srgb,var(--danger) 25%,transparent)}}
+@media (prefers-reduced-motion:reduce){.tile.alert,.pill[data-s="wait"] i{animation:none}}
+
+.switch-row{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:.85rem}
+.switch{position:relative;width:46px;height:26px;border-radius:999px;border:1px solid var(--line);background:var(--surface);cursor:pointer;flex:none;padding:0}
+.switch span{position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;background:var(--muted);transition:transform .2s,background .2s}
+.switch[aria-pressed="true"]{background:var(--accent);border-color:var(--accent)}
+.switch[aria-pressed="true"] span{transform:translateX(20px);background:var(--accent-ink)}
+.btns{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.meter{position:relative;height:10px;border-radius:999px;background:var(--surface);border:1px solid var(--line);overflow:hidden}
+.meter-fill{position:absolute;inset:0 auto 0 0;width:0;background:var(--ok);transition:width .4s,background .3s}
+.tile.alert .meter-fill{background:var(--danger)}
+.meter-mark{position:absolute;top:-1px;bottom:-1px;width:2px;background:var(--ink)}
+.meter-cap{display:flex;justify-content:space-between;font-family:var(--font-mono);font-size:.7rem;color:var(--muted);font-variant-numeric:tabular-nums}
+
+/* Aside */
+aside{display:flex;flex-direction:column;gap:16px;min-width:0}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:16px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.card h2{font-size:1rem;font-weight:600}
+.card .sub{margin:-8px 0 0;color:var(--muted);font-size:.8rem}
+.readings{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.reading{display:flex;flex-direction:column}
+.reading small{font-size:.72rem;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:600}
+.reading strong{font-family:var(--font-display);font-size:2rem;font-weight:600;line-height:1.1;font-variant-numeric:tabular-nums}
+.reading strong em{font-style:normal;font-size:1rem;color:var(--muted);margin-left:2px}
+.spark{width:100%;height:70px;display:block}
+.legend{display:flex;gap:14px;font-size:.75rem;color:var(--muted)}
+.legend i{display:inline-block;width:10px;height:3px;border-radius:2px;margin-right:5px;vertical-align:middle}
+.sim-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.sim-grid .btn{text-align:left;font-size:.82rem;line-height:1.3}
+.log{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;max-height:330px;overflow:auto}
+.log li{display:grid;grid-template-columns:62px minmax(0,1fr);gap:8px;padding:7px 0;border-top:1px solid var(--line);font-size:.84rem}
+.log li:first-child{border-top:0}
+.log time{font-family:var(--font-mono);font-size:.72rem;color:var(--muted);padding-top:2px;font-variant-numeric:tabular-nums}
+.log li[data-t="danger"] span{color:var(--danger);font-weight:600}
+.log li[data-t="ok"] span{color:var(--ok)}
+.log li[data-t="muted"] span{color:var(--muted)}
+.log .empty{display:block;color:var(--muted);border:0}
+/* Nhãn thiết bị, bảng phòng, công cụ, báo động */
+.m-badges{position:absolute;inset:0;pointer-events:none;overflow:hidden}
+.m-badge{position:absolute;transform:translate(-50%,-100%);display:flex;align-items:center;gap:6px;padding:3px 9px 3px 7px;border-radius:999px;border:1px solid var(--line);background:color-mix(in srgb,var(--surface) 92%,transparent);font:600 .72rem/1.3 var(--font-body);color:var(--ink);cursor:pointer;white-space:nowrap;pointer-events:auto;box-shadow:0 2px 8px rgba(0,0,0,.12)}
+.m-badge:hover{border-color:var(--accent)}
+.m-badge i{width:8px;height:8px;border-radius:50%;background:var(--muted);flex:none}
+.m-badge.on i{background:var(--amber);box-shadow:0 0 6px var(--amber)}
+.m-badge.open i{background:var(--ok)}
+.m-badge.alert{border-color:var(--danger);color:var(--danger)}
+.m-badge.alert i{background:var(--danger);animation:blink .6s infinite}
+.m-tools{position:absolute;right:12px;top:12px;display:flex;flex-wrap:wrap;justify-content:flex-end;gap:6px;max-width:60%;z-index:2}
+.m-tool{border:1px solid var(--line);background:color-mix(in srgb,var(--surface) 92%,transparent);color:var(--ink);border-radius:999px;padding:5px 11px;font-size:.76rem;font-weight:600;cursor:pointer}
+.m-tool[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.m-panel{position:absolute;right:12px;top:54px;width:min(290px,calc(100% - 24px));max-height:calc(100% - 128px);overflow:auto;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:6px;box-shadow:0 10px 30px rgba(0,0,0,.18);z-index:3}
+.m-ph{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:4px}
+.m-ph b{display:block;font-family:var(--font-display);font-size:.98rem}
+.m-ph small,.m-row small{display:block;color:var(--muted);font-size:.74rem;font-weight:400}
+.m-x{border:0;background:transparent;font-size:1.3rem;line-height:1;cursor:pointer;color:var(--muted);padding:0 4px}
+.m-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:7px 0;border-top:1px solid var(--line);font-size:.84rem;font-weight:600}
+.m-row .btns{display:flex;gap:6px}.m-row .btn{padding:4px 10px;font-size:.78rem}
+.m-row.deco{font-weight:500}
+.m-row.alert{color:var(--danger)}
+.m-empty{margin:0;color:var(--muted);font-size:.82rem}
+.m-alert{position:absolute;left:50%;top:54px;transform:translateX(-50%);margin:0;background:var(--danger);color:#fff;font-weight:700;padding:6px 14px;border-radius:999px;font-size:.84rem;z-index:3;text-align:center;max-width:calc(100% - 24px)}
+.model.alarm{border-color:var(--danger)}
+.model.alarm::after{content:"";position:absolute;inset:0;pointer-events:none;box-shadow:inset 0 0 70px rgba(220,40,30,.5);animation:alarmglow 1s infinite}
+@keyframes alarmglow{50%{opacity:.25}}
+@media (prefers-reduced-motion:reduce){.model.alarm::after,.m-badge.alert i{animation:none}}
+@media (max-width:640px){.m-tools{max-width:calc(100% - 140px)}.m-tool{padding:4px 8px;font-size:.7rem}}
+/* Đi vào nhà */
+.m-walk-btn{position:absolute;left:12px;top:12px;background:var(--accent);color:var(--accent-ink);border-color:var(--accent);z-index:2}
+.m-walk{position:absolute;inset:0;pointer-events:none}
+.m-cross{position:absolute;left:50%;top:50%;width:14px;height:14px;margin:-7px 0 0 -7px;border:2px solid #fff;border-radius:50%;box-shadow:0 0 0 1px rgba(0,0,0,.45)}
+.m-hint{position:absolute;left:50%;top:calc(50% + 18px);transform:translateX(-50%);margin:0;max-width:min(360px,80%);text-align:center;background:var(--surface);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:5px 10px;font-size:.8rem}
+.m-help{position:absolute;left:50%;bottom:66px;transform:translateX(-50%);margin:0;max-width:min(560px,calc(100% - 24px));text-align:center;background:color-mix(in srgb,var(--surface) 88%,transparent);border-radius:8px;padding:5px 10px;font-size:.76rem;color:var(--muted)}
+@media (max-width:640px){.m-help{display:none}}
+.m-pad{position:absolute;left:50%;bottom:64px;transform:translateX(-50%);display:grid;grid-template-columns:repeat(3,44px);grid-template-rows:repeat(2,44px);gap:6px;pointer-events:auto}
+.m-pad button{border:1px solid var(--line);background:color-mix(in srgb,var(--surface) 85%,transparent);border-radius:10px;font-size:1rem;cursor:pointer;touch-action:none;user-select:none;-webkit-user-select:none}
+.m-pad button:active{background:var(--accent);color:var(--accent-ink)}
+.m-pad [data-move="f"]{grid-column:2;grid-row:1}.m-pad [data-move="l"]{grid-column:1;grid-row:2}.m-pad [data-move="b"]{grid-column:2;grid-row:2}.m-pad [data-move="r"]{grid-column:3;grid-row:2}
+.model.walking canvas{cursor:crosshair}
+/* Bảng điều khiển + API */
+.panel{display:flex;flex-direction:column;gap:12px;min-width:0}
+.api-card code{font-family:var(--font-mono);font-size:.78rem}
+.api-routes{display:grid;grid-template-columns:max-content minmax(0,1fr);gap:6px 14px;font-size:.84rem;align-items:baseline}
+@media (max-width:560px){.api-routes{grid-template-columns:minmax(0,1fr)}.api-routes span{margin-bottom:6px;color:var(--muted)}}
+.table-wrap{overflow-x:auto}
+.api-table{width:100%;border-collapse:collapse;font-size:.82rem;min-width:560px}
+.api-table th{text-align:left;font-size:.72rem;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:600;padding:6px 8px;border-bottom:1px solid var(--line)}
+.api-table td{padding:7px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+.api-table td code{background:var(--tile);border:1px solid var(--line);border-radius:5px;padding:1px 5px;white-space:nowrap}
+.api-table .ro{color:var(--muted);font-style:italic}
+.connect-head{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px}
+/* 3D model */
+.model-card{display:flex;flex-direction:column;gap:10px;min-width:0}
+.model-head{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:4px 16px}
+.model-head h2{font-size:1.1rem;font-weight:600}
+.model-head p{margin:0;color:var(--muted);font-size:.84rem}
+.model{position:relative;height:620px;border-radius:14px;overflow:hidden;border:1px solid var(--line);background:var(--tile)}
+@media (max-width:640px){.model{height:420px}}
+.model canvas{display:block;width:100%;height:100%;touch-action:none}
+.m-labels{position:absolute;inset:0;pointer-events:none}
+.m-lbl{position:absolute;transform:translate(-50%,-50%);font-family:var(--font-display);font-size:.74rem;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);white-space:nowrap;background:color-mix(in srgb,var(--surface) 80%,transparent);padding:2px 7px;border-radius:6px}
+.m-tip{position:absolute;max-width:240px;pointer-events:none;background:var(--surface);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:6px 10px;font-size:.8rem;line-height:1.4;box-shadow:0 6px 18px rgba(0,0,0,.12)}
+.m-tip b{display:block;font-weight:600}
+.m-view{position:absolute;right:12px;bottom:12px;display:flex;align-items:center;gap:8px;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:6px 8px 6px 12px;font-size:.8rem}
+.m-view .seg button{padding:4px 10px;font-family:var(--font-mono);font-size:.8rem}
+@media (max-width:520px){.m-elev,.m-view{font-size:0;gap:0;padding:4px}}
+.m-elev{position:absolute;left:12px;bottom:12px;display:flex;align-items:center;gap:8px;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:6px 8px 6px 12px;font-size:.8rem}
+.m-elev .seg button{padding:4px 11px;font-family:var(--font-mono);font-size:.8rem}
+.m-msg{position:absolute;left:50%;top:12px;transform:translateX(-50%);margin:0;max-width:calc(100% - 24px);background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:6px 12px;font-size:.82rem;text-align:center}
+.m-msg:empty{display:none}
+.foot{color:var(--muted);font-size:.8rem;max-width:80ch;margin:0}
+.foot code{font-family:var(--font-mono);font-size:.74rem}
+</style>
+
+</head>
+<body>
+<div class="app">
+  <header class="top">
+    <div class="brand">
+      <h1>Nhà IoT 3 Tầng</h1>
+      <p>ESP8266 NodeMCU · Firebase Realtime Database · dự án smart-house-fcd4f</p>
+    </div>
+    <div class="top-actions">
+      <span class="pill" id="pill" data-s="sim" role="status"><i></i><span id="pill-text">Chế độ mô phỏng</span></span>
+      <div class="seg" role="group" aria-label="Nguồn dữ liệu">
+        <button type="button" id="mode-sim" aria-pressed="true">Mô phỏng</button>
+        <button type="button" id="mode-live" aria-pressed="false">Mạch thật</button>
+      </div>
+    </div>
+  </header>
+
+  <section class="connect" id="connect" hidden>
+    <div class="connect-head">
+      <h2>Kết nối mạch thật</h2>
+      <div class="seg" role="group" aria-label="Cách kết nối">
+        <button type="button" data-via="api" aria-pressed="true">Qua API riêng</button>
+        <button type="button" data-via="fb" aria-pressed="false">Firebase trực tiếp</button>
+      </div>
+    </div>
+    <p class="via-api">Trang gọi API <code>/api/devices</code> trong project Next.js (chạy bằng <code>npm run dev</code> hoặc đã deploy lên Vercel). Nếu trang này nằm trong thư mục <code>public</code> của chính project đó thì để trống địa chỉ. Trang mở bên trong Claude bị chặn kết nối ra ngoài, nên hãy mở file HTML bằng Chrome.</p>
+    <p class="via-fb" hidden>Dùng đúng tài khoản Firebase mà các mạch ESP8266 đăng nhập. Mật khẩu không được lưu lại. Trang mở bên trong Claude bị chặn kết nối ra ngoài, nên hãy mở file HTML bằng Chrome.</p>
+    <form id="connect-form" class="form-grid" autocomplete="on">
+      <div class="field via-api"><label for="f-base">Địa chỉ API</label><input id="f-base" class="mono" placeholder="http://localhost:3000" autocomplete="url"></div>
+      <div class="field via-api"><label for="f-key">Khóa API</label><input id="f-key" type="password" placeholder="Bỏ trống nếu chưa đặt SMART_HOME_API_KEY" autocomplete="off"></div>
+      <div class="field via-fb" hidden><label for="f-email">Email</label><input id="f-email" type="email" placeholder="email@gmail.com" autocomplete="username"></div>
+      <div class="field via-fb" hidden><label for="f-pass">Mật khẩu</label><input id="f-pass" type="password" placeholder="Mật khẩu tài khoản Firebase" autocomplete="current-password"></div>
+    </form>
+    <details class="via-fb" hidden>
+      <summary>Cấu hình dự án Firebase</summary>
+      <div class="form-grid">
+        <div class="field"><label for="f-api">apiKey</label><input id="f-api" class="mono" form="connect-form"></div>
+        <div class="field"><label for="f-url">databaseURL</label><input id="f-url" class="mono" form="connect-form"></div>
+        <div class="field"><label for="f-domain">authDomain</label><input id="f-domain" class="mono" form="connect-form"></div>
+        <div class="field"><label for="f-proj">projectId</label><input id="f-proj" class="mono" form="connect-form"></div>
+      </div>
+    </details>
+    <div class="form-actions">
+      <button class="btn primary" type="submit" form="connect-form" id="connect-btn">Kết nối</button>
+      <button class="btn" type="button" id="connect-cancel">Quay lại mô phỏng</button>
+      <p class="err" id="connect-err" role="alert"></p>
+    </div>
+  </section>
+
+
+  <div class="main">
+    <section class="model-card" aria-labelledby="m-title">
+      <div class="model-head">
+        <h2 id="m-title">Mô hình 3D</h2>
+        <p>Dựng theo ảnh mô hình mica, kích thước ước lượng. Kéo để xoay, cuộn để phóng to. Bấm vào thiết bị hoặc nhãn để điều khiển, bấm vào sàn một phòng để mở bảng của phòng đó.</p>
+      </div>
+      <div class="model" id="model">
+        <canvas id="model-canvas" aria-label="Mô hình 3D ngôi nhà 3 tầng"></canvas>
+        <div class="m-labels" id="model-labels"></div>
+        <div class="m-tip" id="model-tip" hidden></div>
+        <p class="m-msg" id="model-msg"></p>
+        <div class="m-view">Xem đến
+          <div class="seg" role="group" aria-label="Chọn tầng hiển thị">
+            <button type="button" data-view="1" aria-pressed="false">T1</button>
+            <button type="button" data-view="2" aria-pressed="false">T2</button>
+                      <button type="button" data-view="3" aria-pressed="true">T3</button>
+          <button type="button" data-view="4" aria-pressed="false">Mái</button>
+          </div>
+        </div>
+        <button class="btn m-walk-btn" type="button" id="walk-btn">Đi vào nhà</button>
+        <div class="m-badges" id="model-badges"></div>
+        <div class="m-tools" role="group" aria-label="Tùy chọn mô hình">
+          <button type="button" class="m-tool" id="t-night" aria-pressed="false">Đêm</button>
+          <button type="button" class="m-tool" id="t-sound" aria-pressed="true">Âm thanh</button>
+          <button type="button" class="m-tool" id="t-badges" aria-pressed="true">Nhãn</button>
+          <button type="button" class="m-tool" id="t-npc" aria-pressed="true">Người</button>
+        </div>
+        <p class="m-alert" id="model-alert" role="alert" hidden></p>
+        <section class="m-panel" id="room-panel" aria-label="Điều khiển phòng" hidden></section>
+        <div class="m-walk" id="walk-ui" hidden>
+          <div class="m-cross" aria-hidden="true"></div>
+          <p class="m-hint" id="walk-hint" hidden></p>
+          <p class="m-help">Bấm vào sàn để đi tới · kéo chuột để nhìn quanh · lăn chuột để tiến, lùi · bấm vào đồ vật để điều khiển · bấm lên bậc cầu thang để lên tầng 2 · bấm vào thang máy rồi chọn 1, 2, 3</p>
+        </div>
+        <div class="m-elev">Thang máy
+          <div class="seg" role="group" aria-label="Gọi thang máy">
+            <button type="button" data-elev="1" aria-pressed="true">1</button>
+            <button type="button" data-elev="2" aria-pressed="false">2</button>
+            <button type="button" data-elev="3" aria-pressed="false">3</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <aside>
+      <section class="card">
+        <h2>Nhiệt độ và độ ẩm</h2>
+        <p class="sub">DHT11 ở tầng 1, gửi lên mỗi 2 giây</p>
+        <div class="readings">
+          <div class="reading"><small>Nhiệt độ</small><strong id="r-temp">—<em>°C</em></strong></div>
+          <div class="reading"><small>Độ ẩm</small><strong id="r-humi">—<em>%</em></strong></div>
+        </div>
+        <svg class="spark" id="spark" viewBox="0 0 300 70" preserveAspectRatio="none" role="img" aria-label="Biểu đồ nhiệt độ và độ ẩm gần đây"></svg>
+        <div class="legend"><span><i style="background:var(--danger)"></i>Nhiệt độ</span><span><i style="background:var(--accent)"></i>Độ ẩm</span></div>
+      </section>
+
+      <section class="card" id="sim-card">
+        <h2>Giả lập phần cứng</h2>
+        <p class="sub">Tạo sự kiện như khi có người dùng mạch thật</p>
+        <div class="sim-grid">
+          <button class="btn" type="button" data-sim="keypad">Nhập đúng mật khẩu cửa chính</button>
+          <button class="btn" type="button" data-sim="finger">Quét đúng vân tay tầng 3</button>
+          <button class="btn" type="button" data-sim="wc1">Có người vào WC 1</button>
+          <button class="btn" type="button" data-sim="wc2">Có người vào WC 2</button>
+          <button class="btn" type="button" data-sim="pir">Có chuyển động tầng 1</button>
+          <button class="btn" type="button" data-sim="smoke">Tạo khói tầng 2</button>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>Nhật ký</h2>
+        <ul class="log" id="log"><li class="empty">Chưa có sự kiện. Bật một thiết bị hoặc giả lập một sự kiện.</li></ul>
+      </section>
+    </aside>
+  </div>
+
+  <section class="panel" aria-labelledby="panel-title">
+    <div class="model-head"><h2 id="panel-title">Bảng điều khiển theo tầng</h2><p>Mỗi ô ghi đường dẫn Firebase và mã thiết bị trong API.</p></div>
+    <div class="house" aria-label="Mặt cắt ngôi nhà">
+      <div class="roof" aria-hidden="true"></div>
+      <section class="floor first" aria-labelledby="fl3"><div class="floor-label"><b id="fl3">3</b><span>Tầng 3</span></div><div class="tiles" id="floor-3"></div></section>
+      <section class="floor" aria-labelledby="fl2"><div class="floor-label"><b id="fl2">2</b><span>Tầng 2</span></div><div class="tiles" id="floor-2"></div></section>
+      <section class="floor" aria-labelledby="fl1"><div class="floor-label"><b id="fl1">1</b><span>Tầng 1</span></div><div class="tiles" id="floor-1"></div></section>
+      <div class="ground" aria-hidden="true"></div>
+    </div>
+  </section>
+
+  <section class="card api-card" aria-labelledby="api-title">
+    <h2 id="api-title">API thiết bị</h2>
+    <p class="sub">Project Next.js trả lời các route dưới đây. Gửi khóa trong header <code>x-api-key</code> nếu đã đặt <code>SMART_HOME_API_KEY</code>.</p>
+    <div class="api-routes">
+      <code>GET /api/devices</code><span>Toàn bộ nhánh /home và trạng thái từng thiết bị</span>
+      <code>GET /api/devices/{id}</code><span>Trạng thái một thiết bị</span>
+      <code>POST /api/devices/{id}</code><span>Gửi lệnh, body <code>{"action": "toggle"}</code></span>
+    </div>
+    <div class="table-wrap"><table class="api-table"><thead><tr><th>id</th><th>Tầng</th><th>Thiết bị</th><th>Lệnh</th><th>Đường dẫn Firebase</th></tr></thead><tbody id="api-rows"></tbody></table></div>
+  </section>
+
+  <p class="foot">Mỗi ô ghi đường dẫn Firebase nó đọc/ghi, khớp với firmware trong thư mục CODE: <code>cua_chinh</code>, <code>nha_xe_moi_nhat</code>, <code>den_wc</code>, <code>bao_trom_va_do_am</code>, <code>baochay_denl2</code>, <code>van_tay</code>. Thang máy chạy Arduino Uno riêng, không nối mạng nên không có trên trang.</p>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/firebase@10.12.2/firebase-app-compat.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/firebase@10.12.2/firebase-auth-compat.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/firebase@10.12.2/firebase-database-compat.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script>
+(function(){
+"use strict";
+const $ = s => document.querySelector(s);
+const get = (o, p) => p.split('/').reduce((a, k) => (a == null ? undefined : a[k]), o);
+const setPath = (o, p, v) => { const ks = p.split('/'); let c = o; ks.slice(0, -1).forEach(k => { if (typeof c[k] !== 'object' || c[k] === null) c[k] = {}; c = c[k]; }); c[ks[ks.length - 1]] = v; };
+const clone = o => JSON.parse(JSON.stringify(o || {}));
+const store = { get(k){ try { return JSON.parse(localStorage.getItem(k)); } catch(e){ return null; } }, set(k, v){ try { localStorage.setItem(k, JSON.stringify(v)); } catch(e){} } };
+
+const DEFAULT_CFG = {
+  apiKey: "AIzaSyBom2FOJvMisw2NcE89Zkr-rP_dgOSqbMY",
+  databaseURL: "https://smart-house-fcd4f-default-rtdb.asia-southeast1.firebasedatabase.app",
+  authDomain: "smart-house-fcd4f.firebaseapp.com",
+  projectId: "smart-house-fcd4f"
+};
+
+/* ===== Danh mục thiết bị: bản sao của src/lib/devices.js trong API, để mô phỏng và Firebase trực tiếp dịch lệnh giống hệt API ===== */
+// Danh mục thiết bị của ngôi nhà và cách đọc/ghi chúng trên Firebase Realtime Database.
+// Đường dẫn tính từ nhánh /home, khớp đúng với firmware trong thư mục CODE.
+// File này không phụ thuộc Next.js hay Firebase nên dùng được ở cả server lẫn trình duyệt.
+
+const API_DEVICES = {
+  light1: { floor: 1, kind: 'light', label: 'Đèn tầng 1', path: 'floor_1/light_room_1', invert: true, source: 'cua_chinh.ino' },
+  door1:  { floor: 1, kind: 'door', label: 'Cửa chính', path: 'floor_1/door_opened_1', readOnly: 'Cửa chính chỉ mở bằng bàn phím mật khẩu tại mạch.', source: 'cua_chinh.ino' },
+  garage: { floor: 1, kind: 'garage', label: 'Cửa cuốn nhà xe', path: 'floor_1/garage/status', cmd: 'floor_1/garage/command', source: 'nha_xe_moi_nhat.ino' },
+  wc1:    { floor: 1, kind: 'auto', label: 'Đèn WC 1', path: 'floor_1/wc1_light', readOnly: 'Đèn WC tự bật bằng cảm biến PIR.', source: 'den_wc.ino' },
+  wc2:    { floor: 1, kind: 'auto', label: 'Đèn WC 2', path: 'floor_1/wc2_light', readOnly: 'Đèn WC tự bật bằng cảm biến PIR.', source: 'den_wc.ino' },
+  alarm:  { floor: 1, kind: 'alarm', label: 'Báo trộm (PIR)', path: 'floor_1/alarm_enabled_1', trig: 'floor_1/alarm_triggered_1', source: 'bao_trom_va_do_am.ino' },
+  climate:{ floor: 1, kind: 'sensor', label: 'Nhiệt độ, độ ẩm (DHT11)', path: 'floor_1/temperature_1', humidity: 'floor_1/humidity_1', readOnly: 'Cảm biến chỉ đọc.', source: 'bao_trom_va_do_am.ino' },
+  light2: { floor: 2, kind: 'light', label: 'Đèn tầng 2', path: 'floor_2/light_room_2', source: 'baochay_denl2.ino' },
+  smoke:  { floor: 2, kind: 'smoke', label: 'Báo khói', path: 'floor_2/smoke_level_2', detected: 'floor_2/smoke_detected_2', mute: 'floor_2/buzzer_mute_2', threshold: 120, source: 'baochay_denl2.ino' },
+  light3: { floor: 3, kind: 'light', label: 'Đèn tầng 3', path: 'light_room_3', source: 'van_tay.ino' },
+  door3:  { floor: 3, kind: 'door', label: 'Cửa vân tay', path: 'door_status', readOnly: 'Cửa tầng 3 chỉ mở bằng vân tay tại mạch.', source: 'van_tay.ino' },
+};
+
+const ACTIONS = {
+  light: ['on', 'off', 'toggle'],
+  alarm: ['on', 'off', 'toggle'],
+  smoke: ['mute', 'unmute', 'toggle'],
+  garage: ['open', 'close', 'toggle'],
+};
+
+class DeviceError extends Error {
+  constructor(status, message) { super(message); this.status = status; }
+}
+
+const getPath = (obj, path) => path.split('/').reduce((a, k) => (a == null ? undefined : a[k]), obj);
+
+/** Trạng thái đã chuẩn hóa của một thiết bị, đọc từ nhánh /home. */
+function deviceState(home, id) {
+  const d = API_DEVICES[id];
+  if (!d) throw new DeviceError(404, `Không có thiết bị "${id}".`);
+  const v = p => getPath(home || {}, p);
+  switch (d.kind) {
+    case 'light': case 'auto': {
+      const raw = v(d.path);
+      return { on: raw == null ? null : (d.invert ? !raw : !!raw) };
+    }
+    case 'door': return { open: v(d.path) == null ? null : v(d.path) === true };
+    case 'garage': return { status: v(d.path) ?? null, command: v(d.cmd) ?? null };
+    case 'alarm': return { enabled: v(d.path) === true, triggered: v(d.trig) === true };
+    case 'smoke': {
+      const level = v(d.path);
+      return { level: typeof level === 'number' ? level : null, detected: v(d.detected) === true, buzzerMuted: v(d.mute) === true, threshold: d.threshold };
+    }
+    case 'sensor': return { temperature: v(d.path) ?? null, humidity: v(d.humidity) ?? null };
+    default: return {};
+  }
+}
+
+/** Danh sách mọi thiết bị kèm trạng thái, để trả về từ GET /api/devices. */
+function listDevices(home) {
+  return Object.entries(API_DEVICES).map(([id, d]) => ({
+    id, floor: d.floor, kind: d.kind, label: d.label,
+    actions: d.readOnly ? [] : (ACTIONS[d.kind] || []),
+    readOnly: !!d.readOnly, state: deviceState(home, id),
+  }));
+}
+
+/**
+ * Đổi một lệnh (vd. "toggle") thành các giá trị cần ghi lên Firebase.
+ * Trả về object { "<đường dẫn trong /home>": giá trị } để ghi bằng một lần update().
+ */
+function resolveAction(home, id, action) {
+  const d = API_DEVICES[id];
+  if (!d) throw new DeviceError(404, `Không có thiết bị "${id}".`);
+  if (d.readOnly) throw new DeviceError(403, d.readOnly);
+  const allowed = ACTIONS[d.kind] || [];
+  if (!allowed.includes(action)) throw new DeviceError(400, `Lệnh "${action}" không hợp lệ cho ${d.label}. Dùng: ${allowed.join(', ')}.`);
+  const st = deviceState(home, id);
+  switch (d.kind) {
+    case 'light': {
+      const on = action === 'toggle' ? !(st.on === true) : action === 'on';
+      return { [d.path]: d.invert ? !on : on };
+    }
+    case 'alarm': {
+      const en = action === 'toggle' ? !st.enabled : action === 'on';
+      return { [d.path]: en };
+    }
+    case 'smoke': {
+      const mute = action === 'toggle' ? !st.buzzerMuted : action === 'mute';
+      return { [d.mute]: mute };
+    }
+    case 'garage': {
+      const cmd = action === 'toggle' ? (st.status === 'open' ? 'close' : 'open') : action;
+      return { [d.cmd]: cmd };
+    }
+  }
+  throw new DeviceError(400, 'Lệnh không hợp lệ.');
+}
+
+/* ===== Thiết bị: đường dẫn tính từ /home, đúng như firmware ===== */
+const DEVICES = {
+  3: [
+    { id:'light3', kind:'light', label:'Đèn tầng 3', path:'light_room_3' },
+    { id:'door3', kind:'door', label:'Cửa vân tay', path:'door_status', hint:'Tự mở 2 giây khi quét đúng vân tay' }
+  ],
+  2: [
+    { id:'light2', kind:'light', label:'Đèn phòng tầng 2', path:'floor_2/light_room_2', hint:'Đồng bộ với nút nhấn tại phòng' },
+    { id:'smoke', kind:'smoke', label:'Báo khói', path:'floor_2/smoke_level_2', detected:'floor_2/smoke_detected_2', mute:'floor_2/buzzer_mute_2' }
+  ],
+  1: [
+    { id:'light1', kind:'light', label:'Đèn tầng 1', path:'floor_1/light_room_1', invert:true, hint:'Firmware đảo logic: giá trị false là đèn sáng' },
+    { id:'door1', kind:'door', label:'Cửa chính', path:'floor_1/door_opened_1', hint:'Mở 3 giây khi nhập đúng mật khẩu bàn phím' },
+    { id:'garage', kind:'garage', label:'Cửa cuốn nhà xe', path:'floor_1/garage/status', cmd:'floor_1/garage/command' },
+    { id:'alarm', kind:'alarm', label:'Báo trộm (PIR)', path:'floor_1/alarm_enabled_1', trig:'floor_1/alarm_triggered_1' },
+    { id:'wc1', kind:'auto', label:'Đèn WC 1', path:'floor_1/wc1_light', hint:'Cảm biến PIR, sáng 3 giây' },
+    { id:'wc2', kind:'auto', label:'Đèn WC 2', path:'floor_1/wc2_light', hint:'Cảm biến PIR, sáng 3 giây' }
+  ]
+};
+const ALL = [].concat(DEVICES[1], DEVICES[2], DEVICES[3]);
+
+let backend = null;  // Sim hoặc Live
+let tree = {};       // bản sao nhánh /home
+let prev = null;
+const hist = [];
+let Model = { update(){} };
+
+function sw(label){ return `<div class="switch-row"><span>${label}</span><button class="switch" type="button" aria-pressed="false" aria-label="${label}"><span></span></button></div>`; }
+
+function buildTile(d){
+  const el = document.createElement('article');
+  el.className = 'tile'; el.id = 't-' + d.id;
+  let ctrl = '';
+  if (d.kind === 'light') ctrl = sw('Bật / tắt');
+  if (d.kind === 'alarm') ctrl = sw('Canh gác');
+  if (d.kind === 'garage') ctrl = `<div class="btns"><button class="btn" type="button" data-cmd="open">Mở</button><button class="btn" type="button" data-cmd="close">Đóng</button></div>`;
+  if (d.kind === 'smoke') ctrl = `<div class="meter" aria-hidden="true"><div class="meter-fill"></div><div class="meter-mark" style="left:${(120/1023*100).toFixed(2)}%"></div></div><div class="meter-cap"><span class="lvl">0 / 1023</span><span>ngưỡng 120</span></div>` + sw('Còi báo khói');
+  const paths = [d.path, d.cmd, d.trig, d.detected, d.mute].filter(Boolean).map(p => 'home/' + p).join('\n');
+  el.innerHTML = `<header><span class="lamp" aria-hidden="true"></span><h3>${d.label}</h3></header><p class="state" aria-live="polite">Chưa có dữ liệu</p>${d.hint ? `<p class="hint">${d.hint}</p>` : ''}<div class="ctrl">${ctrl}</div><code class="path"></code>`;
+  el.querySelector('.path').textContent = d.id + ' · ' + paths.split('\n')[0] + (paths.includes('\n') ? ' …' : '');
+  el.querySelector('.path').title = paths;
+
+  const s = el.querySelector('.switch');
+  if (s) s.addEventListener('click', () => {
+    command(d.id, 'toggle');
+  });
+  el.querySelectorAll('[data-cmd]').forEach(b => b.addEventListener('click', () => command('garage', b.dataset.cmd)));
+  d.el = el;
+  return el;
+}
+[1,2,3].forEach(f => DEVICES[f].forEach(d => $('#floor-' + f).appendChild(buildTile(d))));
+
+function isOn(d){ const v = get(tree, d.path); if (v == null) return null; return d.invert ? !v : !!v; }
+
+function updateTile(d){
+  const el = d.el, st = el.querySelector('.state');
+  el.classList.remove('lit', 'open', 'alert', 'armed');
+  if (d.kind === 'light' || d.kind === 'auto') {
+    const on = isOn(d);
+    el.classList.toggle('lit', on === true);
+    st.textContent = on == null ? 'Chưa có dữ liệu' : on ? (d.kind === 'auto' ? 'Đang sáng · có người' : 'Đang sáng') : (d.kind === 'auto' ? 'Tắt · không có người' : 'Tắt');
+    const s = el.querySelector('.switch'); if (s) s.setAttribute('aria-pressed', on === true);
+  }
+  if (d.kind === 'door') {
+    const v = get(tree, d.path);
+    el.classList.toggle('open', v === true);
+    st.textContent = v == null ? 'Chưa có dữ liệu' : v ? 'Đang mở' : 'Đã đóng';
+  }
+  if (d.kind === 'garage') {
+    const status = get(tree, d.path), cmd = get(tree, d.cmd);
+    const pending = backend && backend.pending && backend.pending.garage;
+    el.classList.toggle('open', status === 'open');
+    st.textContent = pending ? (cmd === 'open' ? 'Đang mở…' : 'Đang đóng…') : status === 'open' ? 'Đang mở' : status === 'closed' ? 'Đã đóng' : 'Chưa có dữ liệu';
+    el.querySelector('[data-cmd="open"]').disabled = !!pending || status === 'open';
+    el.querySelector('[data-cmd="close"]').disabled = !!pending || status === 'closed';
+  }
+  if (d.kind === 'alarm') {
+    const en = get(tree, d.path) === true, trig = get(tree, d.trig) === true;
+    el.classList.toggle('alert', trig); el.classList.toggle('armed', en && !trig);
+    st.textContent = trig ? 'Phát hiện chuyển động!' : en ? 'Đang canh gác' : 'Đã tắt';
+    el.querySelector('.switch').setAttribute('aria-pressed', en);
+  }
+  if (d.kind === 'smoke') {
+    const lvl = Number(get(tree, d.path)) || 0, det = get(tree, d.detected) === true, mute = get(tree, d.mute) === true;
+    el.classList.toggle('alert', det);
+    el.querySelector('.meter-fill').style.width = Math.min(100, lvl / 1023 * 100) + '%';
+    el.querySelector('.lvl').textContent = lvl + ' / 1023';
+    st.textContent = get(tree, d.path) == null ? 'Chưa có dữ liệu' : det ? (mute ? 'Có khói · còi đã tắt' : 'Có khói · còi đang kêu') : 'Bình thường';
+    el.querySelector('.switch').setAttribute('aria-pressed', !mute);
+  }
+}
+
+/* ===== Nhật ký ===== */
+const RULES = [
+  ['floor_1/door_opened_1', v => v === true && ['Cửa chính mở (nhập đúng mật khẩu)', 'info']],
+  ['floor_1/garage/status', v => v && [v === 'open' ? 'Cửa nhà xe đã mở' : 'Cửa nhà xe đã đóng', 'info']],
+  ['floor_1/wc1_light', v => v === true && ['Có người vào WC 1, đèn bật', 'info']],
+  ['floor_1/wc2_light', v => v === true && ['Có người vào WC 2, đèn bật', 'info']],
+  ['floor_1/alarm_triggered_1', v => v === true && ['Phát hiện chuyển động ở tầng 1', 'danger']],
+  ['floor_1/alarm_enabled_1', v => [v ? 'Bật báo trộm' : 'Tắt báo trộm', 'muted']],
+  ['floor_2/smoke_detected_2', (v, t) => v ? ['Phát hiện khói ở tầng 2 (mức ' + get(t, 'floor_2/smoke_level_2') + ')', 'danger'] : ['Hết khói ở tầng 2', 'ok']],
+  ['floor_2/buzzer_mute_2', v => [v ? 'Tắt còi báo khói' : 'Bật lại còi báo khói', 'muted']],
+  ['door_status', v => v === true && ['Cửa tầng 3 mở bằng vân tay', 'info']],
+  ['floor_1/light_room_1', v => [v === false ? 'Đèn tầng 1 bật' : 'Đèn tầng 1 tắt', 'muted']],
+  ['floor_2/light_room_2', v => [v ? 'Đèn tầng 2 bật' : 'Đèn tầng 2 tắt', 'muted']],
+  ['light_room_3', v => [v ? 'Đèn tầng 3 bật' : 'Đèn tầng 3 tắt', 'muted']],
+  ['thongbao', v => v && ['Mạch báo: ' + v, 'info']]
+];
+function log(msg, type){
+  const ul = $('#log'); const e = ul.querySelector('.empty'); if (e) e.remove();
+  const li = document.createElement('li'); li.dataset.t = type || 'info';
+  const t = document.createElement('time'); t.textContent = new Date().toLocaleTimeString('vi-VN', { hour12:false });
+  const s = document.createElement('span'); s.textContent = msg;
+  li.append(t, s); ul.prepend(li);
+  while (ul.children.length > 40) ul.lastChild.remove();
+}
+
+/* ===== Biểu đồ nhỏ ===== */
+function drawSpark(){
+  const svg = $('#spark'); const W = 300, H = 70, P = 6;
+  if (hist.length < 2) { svg.innerHTML = ''; return; }
+  const line = (key, lo, hi, color) => {
+    const pts = hist.map((h, i) => [P + i * (W - 2*P) / (hist.length - 1), H - P - (Math.min(hi, Math.max(lo, h[key])) - lo) / (hi - lo) * (H - 2*P)]);
+    const d = pts.map((p, i) => (i ? 'L' : 'M') + p[0].toFixed(1) + ' ' + p[1].toFixed(1)).join(' ');
+    const last = pts[pts.length - 1];
+    return `<path d="${d} L${last[0].toFixed(1)} ${H - P} L${P} ${H - P} Z" fill="${color}" fill-opacity="0.08" stroke="none"/><path d="${d}" fill="none" stroke="${color}" stroke-width="2" vector-effect="non-scaling-stroke" stroke-linejoin="round"/><circle cx="${last[0].toFixed(1)}" cy="${last[1].toFixed(1)}" r="3" fill="${color}"/>`;
+  };
+  const ts = hist.map(h => h.t), hs = hist.map(h => h.h);
+  const rng = a => { const lo = Math.min(...a), hi = Math.max(...a); const pad = Math.max(0.5, (hi - lo) * 0.2); return [lo - pad, hi + pad]; };
+  const [tl, th] = rng(ts), [hl, hh] = rng(hs);
+  svg.innerHTML = [0.25, 0.5, 0.75].map(f => `<line x1="0" x2="${W}" y1="${H*f}" y2="${H*f}" stroke="var(--line)" stroke-width="1" vector-effect="non-scaling-stroke"/>`).join('') + line('h', hl, hh, 'var(--accent)') + line('t', tl, th, 'var(--danger)');
+}
+
+/* ===== Nhận dữ liệu mới ===== */
+function onTree(t){
+  tree = t || {};
+  ALL.forEach(updateTile);
+  const temp = get(tree, 'floor_1/temperature_1'), humi = get(tree, 'floor_1/humidity_1');
+  $('#r-temp').innerHTML = (typeof temp === 'number' ? temp.toFixed(1) : '—') + '<em>°C</em>';
+  $('#r-humi').innerHTML = (typeof humi === 'number' ? humi.toFixed(0) : '—') + '<em>%</em>';
+  if (typeof temp === 'number' && typeof humi === 'number' && temp !== 0) {
+    const l = hist[hist.length - 1];
+    if (!l || l.t !== temp || l.h !== humi) { hist.push({ t: temp, h: humi }); if (hist.length > 40) hist.shift(); drawSpark(); }
+  }
+  Model.update(tree);
+  if (prev) RULES.forEach(([p, fn]) => { const a = get(prev, p), b = get(tree, p); if (a !== b && b !== undefined) { const r = fn(b, tree); if (r) log(r[0], r[1]); } });
+  prev = clone(tree);
+}
+/* Gửi lệnh tới thiết bị theo id, giống hệt POST /api/devices/{id} */
+function command(id, action){ if (backend && backend.command) backend.command(id, action); }
+function localCommand(be, id, action){
+  try { Object.entries(resolveAction(tree, id, action)).forEach(([p, v]) => be.write(p, v)); }
+  catch (e) { log(e.message, 'muted'); }
+}
+
+/* ===== Chế độ mô phỏng: hành vi bắt chước firmware ===== */
+const Sim = {
+  tree: null, iv: null, boost: 0, pending: {},
+  seed(){ return { floor_1:{ light_room_1:true, door_opened_1:false, garage:{ command:'close', status:'closed' }, wc1_light:false, wc2_light:false, temperature_1:29.4, humidity_1:63, alarm_enabled_1:true, alarm_triggered_1:false }, floor_2:{ light_room_2:false, smoke_level_2:42, smoke_detected_2:false, buzzer_mute_2:false }, light_room_3:false, door_status:false, thongbao:'' }; },
+  start(){ if (!this.tree) this.tree = this.seed(); this.pending = {}; clearInterval(this.iv); this.iv = setInterval(() => this.tick(), 2000); this.emit(); },
+  stop(){ clearInterval(this.iv); this.iv = null; },
+  emit(){ if (backend === Sim) onTree(clone(this.tree)); },
+  set(p, v){ setPath(this.tree, p, v); this.emit(); },
+  write(p, v){
+    this.set(p, v);
+    if (p === 'floor_1/garage/command') { this.pending.garage = true; this.emit(); setTimeout(() => { this.pending.garage = false; this.set('floor_1/garage/status', v === 'open' ? 'open' : 'closed'); }, 900); }
+  },
+  command(id, a){ localCommand(Sim, id, a); },
+  later(ms, fn){ setTimeout(() => { if (backend === Sim) fn(); }, ms); },
+  act(a){
+    if (a === 'keypad') { this.set('floor_1/door_opened_1', true); this.set('floor_1/light_room_1', false); this.later(3000, () => this.set('floor_1/door_opened_1', false)); }
+    if (a === 'finger') { this.set('light_room_3', true); this.set('door_status', true); this.later(2000, () => this.set('door_status', false)); }
+    if (a === 'wc1' || a === 'wc2') { const p = 'floor_1/' + a + '_light'; this.set(p, true); this.later(3000, () => this.set(p, false)); }
+    if (a === 'pir') {
+      if (get(this.tree, 'floor_1/alarm_enabled_1') === true) { this.set('floor_1/alarm_triggered_1', true); this.later(3000, () => this.set('floor_1/alarm_triggered_1', false)); }
+      else log('Có chuyển động ở tầng 1 nhưng báo trộm đang tắt', 'muted');
+    }
+    if (a === 'smoke') { this.boost = 430; this.tick(); }
+  },
+  tick(){
+    const f1 = this.tree.floor_1, f2 = this.tree.floor_2;
+    f1.temperature_1 = Math.round(Math.min(33, Math.max(27, f1.temperature_1 + (Math.random() - 0.5) * 0.4)) * 10) / 10;
+    f1.humidity_1 = Math.round(Math.min(78, Math.max(52, f1.humidity_1 + (Math.random() - 0.5) * 1.6)));
+    const base = 32 + Math.round(Math.random() * 22);
+    f2.smoke_level_2 = Math.max(base, Math.round(this.boost));
+    this.boost *= 0.78; if (this.boost < 40) this.boost = 0;
+    f2.smoke_detected_2 = f2.smoke_level_2 > 120;
+    this.emit();
+  }
+};
+
+/* ===== Chế độ mạch thật: Firebase ===== */
+const Live = {
+  app: null, ref: null, connRef: null, pending: {},
+  async connect(cfg, email, pass){
+    if (typeof firebase === 'undefined') throw new Error('Không tải được thư viện Firebase. Kiểm tra kết nối mạng rồi tải lại trang.');
+    await this.disconnect();
+    this.app = firebase.initializeApp(cfg, 'iot3-' + Date.now());
+    const auth = this.app.auth();
+    const timeout = (ms) => new Promise((_, rej) => setTimeout(() => rej({ code: 'timeout' }), ms));
+    await Promise.race([auth.signInWithEmailAndPassword(email, pass), timeout(15000)]);
+    const db = this.app.database();
+    await Promise.race([new Promise((res, rej) => {
+      this.ref = db.ref('home');
+      let first = true;
+      this.ref.on('value', s => { if (first) { first = false; res(); } if (backend === Live) onTree(s.val() || {}); }, err => { if (first) { first = false; rej(err); } else { log('Mất quyền đọc dữ liệu: ' + err.message, 'danger'); setPill('off', 'Lỗi đọc dữ liệu'); } });
+    }), timeout(15000)]);
+    this.connRef = db.ref('.info/connected');
+    this.connRef.on('value', s => { if (backend === Live) setPill(s.val() ? 'live' : 'off', s.val() ? 'Đã kết nối · ' + (cfg.projectId || 'Firebase') : 'Mất kết nối, đang thử lại…'); });
+  },
+  command(id, a){ localCommand(Live, id, a); },
+  write(p, v){
+    if (!this.app) return;
+    if (p === 'floor_1/garage/command') { this.pending.garage = true; onTree(tree); setTimeout(() => { this.pending.garage = false; onTree(tree); }, 2500); }
+    this.app.database().ref('home/' + p).set(v).catch(e => log('Không ghi được ' + p + ': ' + e.message, 'danger'));
+  },
+  async disconnect(){
+    try { if (this.ref) this.ref.off(); if (this.connRef) this.connRef.off(); } catch(e){}
+    this.ref = this.connRef = null;
+    if (this.app) { const a = this.app; this.app = null; try { await a.auth().signOut(); } catch(e){} try { await a.delete(); } catch(e){} }
+  }
+};
+
+/* ===== Chế độ mạch thật qua API riêng (project Next.js) ===== */
+const Api = {
+  base: '', key: '', host: '', iv: null, busy: false, fails: 0, pending: {},
+  async req(path, opts){
+    const ctrl = new AbortController(); const t = setTimeout(() => ctrl.abort(), 10000);
+    try {
+      const headers = Object.assign({ 'Content-Type': 'application/json' }, this.key ? { 'x-api-key': this.key } : {});
+      const r = await fetch(this.base + path, Object.assign({ cache: 'no-store', signal: ctrl.signal, headers }, opts || {}));
+      let j = null; try { j = await r.json(); } catch (e) {}
+      if (!r.ok || !j || j.ok === false) { const err = new Error((j && j.error) || ('Máy chủ trả về mã ' + r.status)); err.status = r.status; throw err; }
+      return j;
+    } finally { clearTimeout(t); }
+  },
+  async connect(base, key){
+    this.stop(); this.base = base.replace(/\/+$/, ''); this.key = key;
+    this.host = this.base ? this.base.replace(/^https?:\/\//, '') : location.host;
+    return this.req('/api/devices');
+  },
+  start(){ this.stop(); this.fails = 0; this.iv = setInterval(() => this.poll(), 1500); },
+  stop(){ clearInterval(this.iv); this.iv = null; },
+  async poll(){
+    if (this.busy) return; this.busy = true;
+    try {
+      const j = await this.req('/api/devices');
+      if (backend === Api) { if (this.fails > 1) log('Kết nối API trở lại', 'ok'); this.fails = 0; setPill('live', 'API · ' + this.host); onTree(j.home || {}); }
+    } catch (e) {
+      this.fails++;
+      if (backend === Api) { setPill('off', this.fails > 1 ? 'Mất kết nối API, đang thử lại…' : 'API chậm phản hồi…'); if (this.fails === 2) log('Không gọi được API: ' + explainApi(e), 'danger'); }
+    } finally { this.busy = false; }
+  },
+  async command(id, action){
+    if (id === 'garage') { this.pending.garage = true; onTree(tree); setTimeout(() => { this.pending.garage = false; onTree(tree); }, 2500); }
+    try { const j = await this.req('/api/devices/' + encodeURIComponent(id), { method: 'POST', body: JSON.stringify({ action }) }); if (backend === Api && j.home) onTree(j.home); }
+    catch (e) { log('API từ chối lệnh "' + action + '" cho ' + id + ': ' + explainApi(e), 'danger'); }
+  }
+};
+function explainApi(e){
+  if (e && e.name === 'AbortError') return 'API không phản hồi sau 10 giây. Kiểm tra project Next.js còn chạy không.';
+  if (e && e.status === 401) return 'Sai hoặc thiếu khóa API. Nhập đúng giá trị SMART_HOME_API_KEY trong file .env.';
+  if (e && e.status === 404 && !/thiết bị/.test(e.message)) return 'Không thấy route /api/devices ở địa chỉ này. Kiểm tra đã chép các file API vào project và địa chỉ đúng cổng.';
+  if (e && e.name === 'TypeError') return 'Không gọi được API tại ' + (Api.base || location.origin) + '. Kiểm tra project Next.js đang chạy (npm run dev) và địa chỉ đúng. Nếu bạn đang mở trang trong Claude, trang này bị chặn kết nối ra ngoài: hãy mở file HTML bằng Chrome.';
+  return (e && e.message) || 'Lỗi không rõ';
+}
+
+function explain(e){
+  const c = (e && (e.code || '')) + '', m = (e && e.message) || '';
+  if (/invalid-credential|wrong-password|user-not-found|invalid-email|invalid-login/.test(c)) return 'Sai email hoặc mật khẩu Firebase.';
+  if (/too-many-requests/.test(c)) return 'Đăng nhập sai quá nhiều lần. Đợi vài phút rồi thử lại.';
+  if (/network-request-failed|timeout/.test(c)) return 'Không kết nối được tới Firebase. Nếu bạn đang mở trang trong Claude, trang này bị chặn kết nối ra ngoài: hãy mở file HTML bằng Chrome. Nếu đã mở bằng Chrome, kiểm tra Internet.';
+  if (/api-key|invalid-api-key/.test(c)) return 'apiKey không hợp lệ. Kiểm tra phần cấu hình dự án.';
+  if (/PERMISSION_DENIED|permission/i.test(c + m)) return 'Tài khoản này không có quyền đọc nhánh /home. Kiểm tra Rules của Realtime Database.';
+  return 'Không kết nối được: ' + (m || c || 'lỗi không rõ');
+}
+
+/* ===== Giao diện chuyển chế độ ===== */
+function setPill(s, text){ $('#pill').dataset.s = s; $('#pill-text').textContent = text; }
+function setSeg(mode){ $('#mode-sim').setAttribute('aria-pressed', mode === 'sim'); $('#mode-live').setAttribute('aria-pressed', mode !== 'sim'); }
+
+let via = 'api';
+function setVia(v){
+  via = v;
+  document.querySelectorAll('[data-via]').forEach(b => b.setAttribute('aria-pressed', b.dataset.via === v));
+  document.querySelectorAll('.via-api').forEach(el => el.hidden = v !== 'api');
+  document.querySelectorAll('.via-fb').forEach(el => el.hidden = v !== 'fb');
+  $('#connect-err').textContent = '';
+}
+document.querySelectorAll('[data-via]').forEach(b => b.addEventListener('click', () => setVia(b.dataset.via)));
+
+async function goSim(){
+  Api.stop();
+  await Live.disconnect();
+  backend = Sim; prev = null; hist.length = 0; drawSpark();
+  Sim.start();
+  setPill('sim', 'Chế độ mô phỏng'); setSeg('sim');
+  $('#sim-card').hidden = false; $('#connect').hidden = true;
+  store.set('iot3-mode', 'sim');
+}
+function showConnect(){
+  setSeg('live'); $('#connect').hidden = false; $('#connect-err').textContent = '';
+  const s = store.get('iot3-conn') || {}; const cfg = Object.assign({}, DEFAULT_CFG, s.cfg || {});
+  setVia(s.via || 'api');
+  const sameOrigin = /^https?:$/.test(location.protocol) && /\.html?$/.test(location.pathname);
+  $('#f-base').value = $('#f-base').value || (s.base != null ? s.base : (sameOrigin ? '' : 'http://localhost:3000'));
+  $('#f-email').value = $('#f-email').value || s.email || '';
+  $('#f-api').value = cfg.apiKey; $('#f-url').value = cfg.databaseURL; $('#f-domain').value = cfg.authDomain; $('#f-proj').value = cfg.projectId;
+  (via === 'api' ? $('#f-base') : ($('#f-email').value ? $('#f-pass') : $('#f-email'))).focus();
+}
+
+$('#mode-sim').addEventListener('click', goSim);
+$('#mode-live').addEventListener('click', () => { if (backend !== Live && backend !== Api) showConnect(); });
+$('#connect-cancel').addEventListener('click', goSim);
+document.querySelectorAll('[data-sim]').forEach(b => b.addEventListener('click', () => { if (backend === Sim) Sim.act(b.dataset.sim); }));
+
+$('#connect-form').addEventListener('submit', async ev => {
+  ev.preventDefault();
+  if (via === 'api') return connectApi();
+  const email = $('#f-email').value.trim(), pass = $('#f-pass').value;
+  if (!email || !pass) { $('#connect-err').textContent = 'Nhập email và mật khẩu tài khoản Firebase.'; return; }
+  const cfg = { apiKey: $('#f-api').value.trim(), databaseURL: $('#f-url').value.trim().replace(/\/$/, ''), authDomain: $('#f-domain').value.trim(), projectId: $('#f-proj').value.trim() };
+  store.set('iot3-conn', Object.assign(store.get('iot3-conn') || {}, { via: 'fb', email, cfg }));
+  $('#connect-btn').disabled = true; $('#connect-err').textContent = '';
+  Sim.stop(); backend = null; setPill('wait', 'Đang kết nối…');
+  try {
+    await Live.connect(cfg, email, pass);
+    backend = Live; prev = null; hist.length = 0; drawSpark();
+    $('#f-pass').value = '';
+    $('#connect').hidden = true; $('#sim-card').hidden = true; setSeg('live');
+    log('Đã kết nối Firebase bằng ' + email, 'ok');
+    // Lấy lại ảnh dữ liệu mới nhất
+    Live.ref.once('value').then(s => onTree(s.val() || {}));
+  } catch (e) {
+    $('#connect-err').textContent = explain(e);
+    await Live.disconnect();
+    backend = Sim; Sim.start(); setPill('sim', 'Chế độ mô phỏng'); setSeg('live');
+  } finally { $('#connect-btn').disabled = false; }
+});
+
+async function connectApi(){
+  const base = $('#f-base').value.trim(), key = $('#f-key').value;
+  store.set('iot3-conn', Object.assign(store.get('iot3-conn') || {}, { via: 'api', base }));
+  $('#connect-btn').disabled = true; $('#connect-err').textContent = '';
+  Sim.stop(); await Live.disconnect(); backend = null; setPill('wait', 'Đang gọi API…');
+  try {
+    const j = await Api.connect(base, key);
+    backend = Api; prev = null; hist.length = 0; drawSpark();
+    onTree(j.home || {});
+    Api.start();
+    $('#connect').hidden = true; $('#sim-card').hidden = true; setSeg('live');
+    setPill('live', 'API · ' + Api.host);
+    log('Đã kết nối API ' + Api.host + ' (' + (j.devices ? j.devices.length : 0) + ' thiết bị)', 'ok');
+  } catch (e) {
+    Api.stop();
+    $('#connect-err').textContent = explainApi(e);
+    backend = Sim; Sim.start(); setPill('sim', 'Chế độ mô phỏng'); setSeg('live');
+  } finally { $('#connect-btn').disabled = false; }
+}
+
+/* Bảng tra cứu API */
+(function(){
+  const tb = $('#api-rows'); if (!tb) return;
+  Object.entries(API_DEVICES).forEach(([id, d]) => {
+    const tr = document.createElement('tr');
+    const acts = d.readOnly ? '<span class="ro">chỉ đọc</span>' : (ACTIONS[d.kind] || []).map(a => '<code>' + a + '</code>').join(' ');
+    const paths = [d.path, d.cmd, d.trig, d.detected, d.mute, d.humidity].filter(Boolean).map(p => '<code>home/' + p + '</code>').join(' ');
+    tr.innerHTML = '<td><code>' + id + '</code></td><td>' + d.floor + '</td><td>' + d.label + '</td><td>' + acts + '</td><td>' + paths + '</td>';
+    tb.appendChild(tr);
+  });
+})();
+
+/* ===== Mô hình 3D dựng theo mô hình mica (three.js) ===== */
+function buildModel(){
+  const wrap = $('#model'), canvas = $('#model-canvas'), labelsEl = $('#model-labels'), tip = $('#model-tip'), msg = $('#model-msg');
+  const none = { update(){} };
+  if (typeof THREE === 'undefined' || !THREE.OrbitControls) { msg.textContent = 'Không tải được thư viện 3D. Kiểm tra mạng rồi tải lại trang.'; return none; }
+  let renderer;
+  try { renderer = new THREE.WebGLRenderer({ canvas, antialias: true }); }
+  catch (e) { msg.textContent = 'Trình duyệt không hỗ trợ WebGL nên không hiển thị được mô hình 3D.'; return none; }
+  renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
+
+  const D = {}; ALL.forEach(d => D[d.id] = d);
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(36, 1, 0.05, 200);
+  camera.position.set(4.2, 8.2, -12.2);
+  const controls = new THREE.OrbitControls(camera, canvas);
+  controls.target.set(0.2, 1.6, 0.4); controls.enableDamping = true; controls.enablePan = false;
+  controls.minDistance = 3; controls.maxDistance = 24; controls.maxPolarAngle = Math.PI * 0.49; controls.update();
+  const hemi = new THREE.HemisphereLight(0xffffff, 0x556666, 0.85); scene.add(hemi);
+  const sun = new THREE.DirectionalLight(0xffffff, 0.5); sun.position.set(5, 12, 8); scene.add(sun);
+
+  /* Đơn vị mặt bằng: 1 ô = 1 cm ước lượng trên mô hình; S đổi sang đơn vị cảnh */
+  const S = 0.1, CX = 48, CZ = 44, FH = 1.4, SL = 0.1, T = 0.05;
+  const px = x => (x - CX) * S, pz = z => (z - CZ) * S, fy = f => f * (FH + SL);
+
+  const mat = (c, o) => new THREE.MeshStandardMaterial(Object.assign({ color: c, roughness: .85, metalness: 0 }, o || {}));
+  function canvasTex(draw, size){ const c = document.createElement('canvas'); c.width = c.height = size || 128; draw(c.getContext('2d'), c.width); const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; return t; }
+  const gridTex = (bg, line) => canvasTex((x, n) => { x.fillStyle = bg; x.fillRect(0, 0, n, n); x.strokeStyle = line; x.lineWidth = 3; x.strokeRect(0, 0, n, n); });
+  const woodTex = (bg, line) => canvasTex((x, n) => {
+    x.fillStyle = bg; x.fillRect(0, 0, n, n); const rows = 8, h = n / rows;
+    for (let r = 0; r < rows; r++) { x.fillStyle = `rgba(0,0,0,${(r % 3) * .03})`; x.fillRect(0, r * h, n, h); x.strokeStyle = line; x.lineWidth = 1.5; x.beginPath(); x.moveTo(0, r * h); x.lineTo(n, r * h); const j = ((r * 37) % 7) / 7 * n; x.moveTo(j, r * h); x.lineTo(j, r * h + h); x.stroke(); }
+  }, 256);
+  const patternTex = canvasTex((x, n) => { x.fillStyle = '#eceaf6'; x.fillRect(0, 0, n, n); x.strokeStyle = '#a9a3d6'; x.lineWidth = 2; x.strokeRect(1, 1, n - 2, n - 2); x.beginPath(); x.arc(n / 2, n / 2, n / 4, 0, Math.PI * 2); x.moveTo(n / 2, 6); x.lineTo(n - 6, n / 2); x.lineTo(n / 2, n - 6); x.lineTo(6, n / 2); x.closePath(); x.stroke(); });
+  const TX = {
+    patio: gridTex('#f1f3f8', '#c9d2e3'), mosaic: gridTex('#9cc4de', '#7aa7c6'), whiteTile: gridTex('#f3f2f5', '#d4d1da'),
+    pinkTile: gridTex('#efdbe7', '#d7b8ca'), pink: woodTex('#ebd3e3', '#d9bdd0'), wood: woodTex('#dcc5a0', '#c3a77c'),
+    peach: woodTex('#e3b896', '#c99a77'), terrace: patternTex
+  };
+  const texMat = (tex, w, d, cell) => { const t = tex.clone(); t.needsUpdate = true; t.repeat.set(w / cell, d / cell); return new THREE.MeshStandardMaterial({ map: t, roughness: .9 }); };
+  const M = {
+    mica: mat(0xf6f4f7), base: mat(0xf0f0f0), slab: mat(0xf3f1f4),
+    acrylic: mat(0xd4ecf3, { transparent: true, opacity: .2, roughness: .1, depthWrite: false }),
+    water: mat(0x4fc0d6, { emissive: 0x1b6f80, emissiveIntensity: .25, roughness: .2 }),
+    jute: mat(0xc2a06d), grass: mat(0x4fae4a), grassDark: mat(0x3b8a3f), flowerRed: mat(0xe0324b), flowerPink: mat(0xf2a7c3), flowerYellow: mat(0xf2d33b),
+    black: mat(0x1f2124), servo: mat(0x2846c8), elev: mat(0xa9d4dc), elevGlass: mat(0xa9d4dc, { transparent: true, opacity: .32, depthWrite: false }),
+    cabin: mat(0xe9cfe0), stair: mat(0x9b9d9d), fanRed: mat(0xff4a2a), orange: mat(0xf2a33a), woodDark: mat(0xb08a5a), blueRod: mat(0x2b55d6),
+    curtain: mat(0xf7f7f2), silver: mat(0xb9bec2, { metalness: .5, roughness: .4 }), hit: new THREE.MeshBasicMaterial({ visible: false })
+  };
+  const B = (g, w, h, d, m, x, y, z) => { const o = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m); o.position.set(x, y, z); g.add(o); return o; };
+  const Ball = (g, r, m, x, y, z) => { const o = new THREE.Mesh(new THREE.SphereGeometry(r, 16, 12), m); o.position.set(x, y, z); g.add(o); return o; };
+  const Cyl = (g, r, h, m, x, y, z) => { const o = new THREE.Mesh(new THREE.CylinderGeometry(r, r, h, 20), m); o.position.set(x, y, z); g.add(o); return o; };
+  const colliders = [], floorMeshes = [], stairMeshes = [], DR = {};
+  let noSolid = false;
+  const roof = new THREE.Group();
+  const walk = { on: false, f: 0, x: 0, z: 0, yaw: 0, pitch: 0, lx: 0, ly: 0, keys: {}, pad: {}, saved: null, hintN: 0, dest: null, stuck: 0 };
+  const solid = (x0, x1, z0, z1, y0, y1) => colliders.push({ x0: px(Math.min(x0, x1)), x1: px(Math.max(x0, x1)), z0: pz(Math.min(z0, z1)), z1: pz(Math.max(z0, z1)), y0, y1 });
+  const plate = (g, x0, z0, x1, z1, m, y, h) => { h = h || .012; if (h >= .15 && g !== roof && !noSolid) solid(x0, x1, z0, z1, y, y + h); return B(g, (x1 - x0) * S, h, (z1 - z0) * S, m, px((x0 + x1) / 2), y + h / 2, pz((z0 + z1) / 2)); };
+  const floorT = (g, tex, cell, x0, z0, x1, z1, y) => { const m = plate(g, x0, z0, x1, z1, texMat(tex, x1 - x0, z1 - z0, cell), y); floorMeshes.push({ m, f: Math.round(y / (FH + SL)) }); return m; };
+  const wallX = (g, x0, x1, z, y, h, m) => { if (h >= .3) solid(x0, x1, z - .3, z + .3, y, y + h); return B(g, (x1 - x0) * S, h, T, m || M.mica, px((x0 + x1) / 2), y + h / 2, pz(z)); };
+  const wallZ = (g, z0, z1, x, y, h, m) => { if (h >= .3) solid(x - .3, x + .3, z0, z1, y, y + h); return B(g, T, h, (z1 - z0) * S, m || M.mica, px(x), y + h / 2, pz((z0 + z1) / 2)); };
+
+  const floors = [0, 1, 2].map(() => { const g = new THREE.Group(); scene.add(g); return g; });
+  const clickables = [], labels = [];
+  const LIGHTS = {};
+  function lightDev(id, g, segs, y, plPos, range){
+    const dev = LIGHTS[id] = { strips: [], hits: [], pl: null, on: false };
+    segs.forEach(([x0, z0, x1, z1]) => {
+      const hz = z0 === z1, len = (hz ? x1 - x0 : z1 - z0) * S;
+      const m = new THREE.MeshStandardMaterial({ color: 0xfdf4e0, emissive: 0xffb84d, emissiveIntensity: 0 });
+      const s = B(g, hz ? len : .03, .03, hz ? .03 : len, m, px((x0 + x1) / 2), y, pz((z0 + z1) / 2));
+      dev.strips.push(s); dev.hits.push(B(g, hz ? len : .24, .26, hz ? .24 : len, M.hit, s.position.x, y - .06, s.position.z));
+    });
+    dev.pl = new THREE.PointLight(0xffb84d, 0, range || 7, 2); dev.pl.position.set(px(plPos[0]), plPos[1], pz(plPos[2])); g.add(dev.pl);
+    return dev;
+  }
+  const label = (f, text, x, y, z) => { const el = document.createElement('span'); el.className = 'm-lbl'; el.textContent = text; labelsEl.appendChild(el); labels.push({ f, el, v: new THREE.Vector3(px(x), y, pz(z)) }); };
+
+  /* ================= TẦNG 1 ================= */
+  { const g = floors[0], y = 0;
+    B(g, 100 * S, .24, 86 * S, M.base, px(48), -.12, pz(40));
+    [[-1, -2], [97, -2], [-1, 82], [97, 82]].forEach(([x, z]) => B(g, .12, .4, .12, M.base, px(x), -.44, pz(z)));
+    // Sân, hồ bơi, sàn gỗ đay, bồn cây
+    floorT(g, TX.patio, 2, 4, 0, 68, 26, y);
+    DR.pool = plate(g, 30, 4, 50, 18, M.water, y + .012, .02);
+    const deck = plate(g, 22, 3, 29, 16, M.jute, y + .012, .05); deck.rotation.y = .08;
+    plate(g, 22, 21, 56, 25.6, M.grassDark, y + .012, .12);
+    for (let i = 0; i < 46; i++) { const c = new THREE.Mesh(new THREE.ConeGeometry(.05, .16 + Math.random() * .1, 6), i % 3 ? M.flowerRed : M.grass); c.position.set(px(23 + Math.random() * 32), .2 + Math.random() * .04, pz(21.6 + Math.random() * 3.6)); g.add(c); }
+    // Sàn các phòng
+    floorT(g, TX.pink, 6, 4, 26, 60, 46, y); floorT(g, TX.wood, 5, 16, 30, 28, 44, y + .004); floorT(g, TX.wood, 5, 38, 34, 48, 44, y + .004);
+    floorT(g, TX.pink, 6, 44, 46, 64, 76, y); floorT(g, TX.pink, 6, 20, 46, 44, 66, y); floorT(g, TX.pinkTile, 3, 4, 46, 20, 76, y);
+    floorT(g, TX.pink, 6, 60, 26, 92, 36, y); floorT(g, TX.wood, 5, 60, 36, 92, 58, y); floorT(g, TX.pink, 6, 82, 58, 92, 76, y);
+    floorT(g, TX.whiteTile, 2, 68, 6, 80, 26, y); floorT(g, TX.mosaic, 1.5, 80, 6, 92, 26, y);
+    // Tường bao và vách
+    wallZ(g, 26, 50, 4, y, FH); wallZ(g, 62, 76, 4, y, FH); wallZ(g, 50, 62, 4, y + 1.0, .4);
+    wallX(g, 4, 18, 26, y, FH); wallX(g, 48, 60, 26, y, FH); wallX(g, 18, 48, 26, y, .45); wallX(g, 18, 48, 26, y + 1.15, .25);
+    [[18, 26, 18, 26, .45, 1.15], [48, 26, 48, 26, .45, 1.15]].forEach(([x]) => B(g, .03, .72, .04, M.grass, px(x), .8, pz(25.9)));
+    B(g, 30 * S, .03, .04, M.grass, px(33), 1.13, pz(25.9)); B(g, 30 * S, .03, .04, M.grass, px(33), .47, pz(25.9));
+    wallZ(g, 26, 26, 60, y, FH); wallX(g, 60, 68, 26, y, FH);
+    wallX(g, 68, 92, 6, y, FH); wallZ(g, 6, 26, 68, y, FH); wallZ(g, 6, 24, 80, y, FH);
+    wallX(g, 68, 70, 26, y, FH); wallX(g, 73, 83, 26, y, FH); wallX(g, 86, 92, 26, y, FH);
+    wallZ(g, 6, 76, 92, y, FH);
+    wallX(g, 60, 62, 36, y, FH); wallX(g, 66, 92, 36, y, FH); wallZ(g, 26, 38, 60, y, FH); wallZ(g, 44, 58, 60, y, FH); wallZ(g, 38, 44, 60, y + 1.15, .25); wallX(g, 60, 64, 58, y, FH); wallX(g, 82, 92, 58, y, FH);
+    wallX(g, 4, 20, 46, y, FH); wallZ(g, 46, 66, 20, y, FH);
+    wallX(g, 4, 46, 76, y, FH); wallX(g, 58, 64, 76, y, FH); wallX(g, 82, 92, 76, y, FH); wallX(g, 46, 58, 76, y + 1.15, .25);
+    wallZ(g, 60, 70, 52, y, FH); wallX(g, 52, 60, 60, y, FH);
+    const slant = B(g, .03, 1.1, 12 * S, M.mica, px(88), .55, pz(16)); slant.rotation.y = .35;
+    // Bếp: kệ chữ L
+    plate(g, 20, 46, 44, 49, M.mica, y, .7); plate(g, 40, 49, 44, 62, M.mica, y, .7); plate(g, 26, 54, 36, 58, M.mica, y, .7);
+    // Cầu thang lên tầng 2 (bậc cao dần về phía x=20)
+    noSolid = true;
+    for (let i = 0; i < 9; i++) { const w = 22 / 9, h = (i + 1) * (FH + SL) / 9; stairMeshes.push(plate(g, 42 - (i + 1) * w, 66, 42 - i * w, 76, M.stair, y, h)); }
+    noSolid = false;
+    // Phòng làm việc
+    Cyl(g, .32, .012, M.orange, px(70), .01, pz(42)); plate(g, 74, 48, 84, 54, M.mica, y, .45); plate(g, 77, 49.5, 81, 52.5, M.black, .45, .02); Ball(g, .1, M.grass, px(86), .25, pz(52));
+    // Cục nóng máy lạnh
+    B(g, .1, .28, .5, M.mica, px(92) + .08, .9, pz(30)); const acf = Cyl(g, .1, .02, M.flowerPink, px(92) + .14, .9, pz(30)); acf.rotation.z = Math.PI / 2;
+  }
+  // Thiết bị tầng 1
+  const F1 = floors[0];
+  const door1 = new THREE.Group(); door1.position.set(px(46), 0, pz(76)); F1.add(door1);
+  const door1Mesh = B(door1, 12 * S, 1.15, .02, M.acrylic, 6 * S, .575, 0);
+  [[6 * S, 1.14, 12 * S, .03], [6 * S, .01, 12 * S, .03]].forEach(([x, yy, w, h]) => B(door1, w, h, .03, M.black, x, yy, 0));
+  B(door1, .03, 1.15, .03, M.black, 12 * S, .575, 0);
+  B(F1, .1, .08, .14, M.servo, px(46.8), 1.2, pz(75.4));
+  const keypad = B(F1, .16, .2, .02, M.black, px(59.5), .72, pz(76.4));
+  const keyLed = Ball(F1, .02, mat(0x333333, { emissive: 0x23845a, emissiveIntensity: 0 }), px(60.3), .86, pz(76.45));
+  const gPivot = new THREE.Group(); gPivot.position.set(px(4), 1.0, pz(56)); F1.add(gPivot);
+  const gDoor = B(gPivot, .025, 1.0, 12 * S, M.woodDark, 0, -.5, 0);
+  for (let i = 1; i < 8; i++) B(gPivot, .03, .012, 12 * S, M.black, 0, -i * .125, 0);
+  // LCD + DHT11 + PIR trên tường trái phòng khách
+  const lcdCanvas = document.createElement('canvas'); lcdCanvas.width = 256; lcdCanvas.height = 96; const lcdTex = new THREE.CanvasTexture(lcdCanvas);
+  B(F1, .02, .34, .7, M.black, px(4) + .035, 1.0, pz(32));
+  const lcd = new THREE.Mesh(new THREE.PlaneGeometry(.6, .24), new THREE.MeshBasicMaterial({ map: lcdTex })); lcd.rotation.y = Math.PI / 2; lcd.position.set(px(4) + .05, 1.0, pz(32)); F1.add(lcd);
+  function drawLcd(t, h){ const c = lcdCanvas.getContext('2d'); c.fillStyle = '#1d4fa0'; c.fillRect(0, 0, 256, 96); c.fillStyle = '#e8f1ff'; c.font = '600 22px monospace'; c.fillText('Nhiet do: ' + (typeof t === 'number' ? t.toFixed(1) : '--') + '°C', 12, 38); c.fillText('Do am  : ' + (typeof h === 'number' ? h.toFixed(1) : '--') + '%', 12, 74); lcdTex.needsUpdate = true; }
+  drawLcd();
+  B(F1, .03, .08, .1, mat(0x3a7bd5), px(4) + .04, .8, pz(36.5));
+  const pirMat = mat(0xf4f4f0, { emissive: 0xc23e2c, emissiveIntensity: 0 });
+  const pir = Ball(F1, .07, pirMat, px(4) + .06, 1.1, pz(38.5));
+  const alarmLight = new THREE.PointLight(0xff3b2b, 0, 7, 2); alarmLight.position.set(px(30), 1.0, pz(36)); F1.add(alarmLight);
+  B(F1, .03, .12, .06, M.black, px(68) + .04, 1.0, pz(18)); B(F1, .03, .12, .06, M.black, px(80) + .04, 1.0, pz(16));
+  // Quạt trần trang trí
+  B(F1, .16, .05, 10 * S, M.mica, px(30), FH - .02, pz(31));
+  Cyl(F1, .05, .12, M.silver, px(30), FH - .12, pz(36));
+  const fan = new THREE.Group(); fan.position.set(px(30), FH - .2, pz(36)); F1.add(fan);
+  for (let i = 0; i < 4; i++) { const bl = B(fan, .34, .012, .12, M.fanRed, 0, 0, 0); bl.geometry.translate(.18, 0, 0); bl.rotation.y = i * Math.PI / 2; }
+  let fanOn = false;
+  lightDev('light1', F1, [[4, 26.5, 60, 26.5], [4.5, 26, 4.5, 46], [60, 36.5, 92, 36.5]], FH - .04, [30, 1.1, 38], 7);
+  lightDev('wc1', F1, [[68, 6.5, 80, 6.5]], FH - .04, [74, 1.05, 16], 2.6);
+  lightDev('wc2', F1, [[80, 6.5, 92, 6.5]], FH - .04, [86, 1.05, 16], 2.6);
+  [['Phòng khách', 30, 36], ['Nhà xe', 12, 61], ['Bếp', 32, 52], ['Cầu thang', 31, 71], ['Hồ bơi', 40, 11], ['WC 1', 74, 15], ['WC 2', 86, 13], ['Phòng làm việc', 76, 44], ['Sảnh', 54, 66]].forEach(([t, x, z]) => label(0, t, x, FH + .2, z));
+
+  /* ================= TẦNG 3: tầng tường mica trong ================= */
+  { const g = floors[2], y = fy(2);
+    [[4, 26, 92, 60], [4, 60, 20, 76], [42, 60, 64, 76], [20, 60, 42, 66], [82, 60, 92, 76]].forEach(([a, b, c, d]) => { plate(g, a, b, c, d, M.slab, y - SL, SL); floorT(g, TX.peach, 6, a, b, c, d, y); });
+    // Tường ngoài bằng mica trong
+    wallX(g, 4, 92, 26, y, FH, M.acrylic); wallZ(g, 26, 76, 4, y, FH, M.acrylic); wallZ(g, 26, 76, 92, y, FH, M.acrylic);
+    wallX(g, 4, 64, 76, y, FH, M.acrylic); wallX(g, 82, 92, 76, y, FH, M.acrylic);
+    // Lõi cầu thang chữ U, phòng tắm cạnh thang máy
+    wallX(g, 18, 44, 56, y, FH); wallZ(g, 56, 76, 18, y, FH); wallZ(g, 56, 76, 44, y, FH); wallX(g, 44, 64, 60, y, FH);
+    floorT(g, TX.pinkTile, 2.5, 44, 60, 64, 76, y + .004);
+    // Phòng có rèm
+    wallX(g, 4, 26, 50, y, FH); wallZ(g, 26, 40, 26, y, FH); wallZ(g, 46, 50, 26, y, FH);
+    const rod = Cyl(g, .012, 20 * S, M.blueRod, px(15), y + 1.15, pz(27.5)); rod.rotation.z = Math.PI / 2;
+    DR.cur3 = [6.5, 23.5].map(x => B(g, .3, 1.0, .1, M.curtain, px(x), y + .62, pz(27.6)));
+    // Hiên nhỏ có cửa song xám, nóc là bồn hoa
+    wallX(g, 26, 40, 36, y, FH); wallZ(g, 26, 36, 40, y, FH);
+    plate(g, 26, 26, 40, 36, M.mica, y + FH, .05);
+    plate(g, 26.3, 26.3, 39.7, 35.7, M.grass, y + FH + .05, .1);
+    plate(g, 26.3, 26.3, 39.7, 26.9, M.flowerYellow, y + FH + .05, .13); plate(g, 26.3, 35.1, 39.7, 35.7, M.flowerYellow, y + FH + .05, .13);
+    for (let i = 0; i < 34; i++) Ball(g, .03, i % 3 ? M.flowerPink : M.flowerYellow, px(27.5 + Math.random() * 11), y + FH + .16, pz(27.5 + Math.random() * 7));
+    for (let i = 0; i < 6; i++) B(g, .07, 1.15, .04, mat(0x8a8d90), px(27.6 + i * 2.2), y + .62, pz(25.85));
+    B(g, 14 * S, .06, .05, M.mica, px(33), y + .05, pz(25.85));
+    // Góc Bar
+    plate(g, 6, 70, 14, 76, mat(0xe0399a), y, 1.15);
+    const barCv = document.createElement('canvas'); barCv.width = 256; barCv.height = 256; const bx = barCv.getContext('2d');
+    bx.fillStyle = '#d42d8c'; bx.fillRect(0, 0, 256, 256); bx.strokeStyle = 'rgba(255,255,255,.18)'; bx.lineWidth = 2;
+    for (let r = 0; r < 256; r += 22) { bx.beginPath(); bx.moveTo(0, r); bx.lineTo(256, r); bx.stroke(); }
+    bx.fillStyle = '#fff'; bx.font = 'italic 700 86px Georgia, serif'; bx.fillText('Bar', 34, 150);
+    bx.strokeStyle = '#fff'; bx.lineWidth = 5; bx.beginPath(); bx.moveTo(176, 90); bx.lineTo(236, 90); bx.lineTo(206, 140); bx.closePath(); bx.moveTo(206, 140); bx.lineTo(206, 190); bx.moveTo(186, 192); bx.lineTo(226, 192); bx.stroke();
+    const barSign = new THREE.Mesh(new THREE.PlaneGeometry(.8, 1.1), new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(barCv) })); barSign.rotation.y = Math.PI; barSign.position.set(px(10), y + .58, pz(70) - .006); g.add(barSign); DR.bar = barSign;
+    // Tranh treo tường phòng tắm
+    const picCv = document.createElement('canvas'); picCv.width = 192; picCv.height = 128; const pc = picCv.getContext('2d');
+    const gr = pc.createLinearGradient(0, 0, 0, 128); gr.addColorStop(0, '#8fb6e8'); gr.addColorStop(1, '#f2d7e6'); pc.fillStyle = gr; pc.fillRect(0, 0, 192, 128);
+    pc.fillStyle = '#e8a25a'; pc.beginPath(); pc.moveTo(20, 110); pc.lineTo(90, 30); pc.lineTo(170, 110); pc.fill(); pc.fillStyle = '#fff'; pc.fillRect(0, 0, 192, 6); pc.fillRect(0, 122, 192, 6);
+    const pic = new THREE.Mesh(new THREE.PlaneGeometry(.75, .5), new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(picCv) })); pic.rotation.y = Math.PI; pic.position.set(px(54), y + .8, pz(60) - .03); g.add(pic);
+    // Ban công lan can dây đay phía sau
+    floorT(g, TX.pinkTile, 2.5, 20, 76, 44, 81, y - .004);
+    plate(g, 20, 80.4, 44, 81, M.jute, y, .4); plate(g, 20, 76, 20.6, 81, M.jute, y, .4); plate(g, 43.4, 76, 44, 81, M.jute, y, .4);
+    // Phòng ngủ: giường, bàn, ghế
+    plate(g, 78, 32, 88, 48, M.mica, y, .2); plate(g, 78, 32, 88, 33.5, M.woodDark, y, .38); plate(g, 78, 46.5, 88, 48, M.woodDark, y, .3);
+    plate(g, 44, 38, 58, 47, M.mica, y, .34);
+    [[45, 33.5], [53, 33.5], [45, 48], [53, 48]].forEach(([x, z]) => { plate(g, x, z, x + 4, z + 4, M.mica, y, .18); plate(g, x, z < 40 ? z : z + 3.4, x + 4, z < 40 ? z + .6 : z + 4, M.mica, y, .42); });
+    plate(g, 30, 46, 36, 50, M.mica, y, .26); plate(g, 31, 51, 35, 54, M.mica, y, .18);
+    plate(g, 4.5, 30, 7.5, 44, M.black, y, .32); plate(g, 4.5, 30, 7.5, 44, M.woodDark, y + .32, .02);
+    plate(g, 12, 38, 22, 46, M.mica, y, .22); plate(g, 12, 45, 22, 46.5, M.mica, y, .4);
+    Cyl(g, .07, .03, M.black, px(4) + .04, y + 1.15, pz(66)).rotation.z = Math.PI / 2;
+    const leaning = B(g, .02, .7, 7 * S, M.woodDark, px(86), y + .35, pz(56)); leaning.rotation.z = .25;
+  }
+  const F3 = floors[2], y3 = fy(2);
+  const door3 = new THREE.Group(); door3.position.set(px(26), y3, pz(40)); F3.add(door3);
+  const door3Mesh = B(door3, .02, 1.25, 6 * S, M.acrylic, 0, .625, 3 * S);
+  B(door3, .025, 1.25, .025, M.black, 0, .625, 6 * S);
+  B(F3, .1, .08, .14, M.servo, px(26), y3 + FH + .02, pz(41));
+  B(F3, .14, .36, .14, M.mica, px(28.5), y3 + .18, pz(48));
+  const finger = B(F3, .14, .06, .12, mat(0x26302f, { emissive: 0x3a8fd6, emissiveIntensity: .25 }), px(28.5), y3 + .39, pz(48));
+  const buzz3 = Cyl(F3, .045, .06, M.black, px(24), y3 + 1.0, pz(56) - .05); buzz3.rotation.x = Math.PI / 2;
+  lightDev('light3', F3, [[4, 26.3, 92, 26.3], [4.3, 26, 4.3, 76], [91.7, 26, 91.7, 76]], y3 + FH - .02, [60, y3 + 1.1, 44], 8);
+  [['Phòng ngủ', 70, 42], ['Phòng rèm', 15, 38], ['Hiên + bồn hoa', 33, 31], ['Bar', 10, 72], ['Ban công', 32, 79], ['Phòng tắm', 54, 68], ['Lõi cầu thang', 31, 64]].forEach(([t, x, z]) => label(2, t, x, y3 + FH + .2, z));
+
+  /* ================= TẦNG 2: phòng + sân thượng ================= */
+  { const g = floors[1], y = fy(1);
+    [[4, 26, 92, 60], [4, 60, 20, 76], [20, 60, 42, 66], [42, 60, 64, 76], [82, 60, 92, 76]].forEach(([a, b, c, d]) => plate(g, a, b, c, d, M.slab, y - SL, SL));
+    floorT(g, TX.wood, 5, 4, 26, 48, 66, y); floorT(g, TX.wood, 5, 4, 66, 20, 76, y); floorT(g, TX.wood, 5, 42, 66, 48, 76, y);
+    wallX(g, 20, 42, 66, y, .4, M.woodDark); wallZ(g, 66, 76, 42, y, .4, M.woodDark);
+    floorT(g, TX.terrace, 3, 48, 26, 92, 60, y); floorT(g, TX.terrace, 3, 48, 60, 64, 76, y); floorT(g, TX.terrace, 3, 82, 60, 92, 76, y);
+    // Phòng: tường mica, vách ngăn bên trong
+    wallX(g, 4, 48, 26, y, FH); wallZ(g, 26, 76, 4, y, FH); wallX(g, 4, 48, 76, y, FH);
+    wallZ(g, 26, 34, 48, y, FH); wallZ(g, 44, 76, 48, y, FH);
+    wallX(g, 4, 30, 58, y, FH * .85);
+    // Sân thượng: lan can thấp + cột
+    wallX(g, 48, 92, 26, y, .45); wallZ(g, 26, 76, 92, y, .45); wallX(g, 82, 92, 76, y, .45); wallX(g, 48, 64, 76, y, .45);
+    [[92, 26], [92, 44], [92, 60], [92, 76], [70, 26], [64, 76]].forEach(([x, z]) => B(g, .1, .6, .1, M.mica, px(x), y + .3, pz(z)));
+    // Vườn cỏ, hàng rào tre, ao
+    plate(g, 66, 27, 91, 39, M.grass, y, .03);
+    for (let i = 0; i < 18; i++) B(g, .025, .3, .025, M.jute, px(66 + i * .8), y + .15, pz(39));
+    Cyl(g, .22, .03, M.water, px(70), y + .04, pz(31));
+    for (let i = 0; i < 10; i++) { const c = new THREE.Mesh(new THREE.ConeGeometry(.05, .25, 6), i % 3 ? M.grass : M.flowerRed); c.position.set(px(74 + Math.random() * 16), y + .16, pz(28 + Math.random() * 9)); g.add(c); }
+    plate(g, 70, 46, 90, 48, M.grass, y, .03);
+    Cyl(g, .16, .02, M.mica, px(58), y + .26, pz(54)); Cyl(g, .02, .26, M.mica, px(58), y + .13, pz(54));
+    [[54.5, 54], [61.5, 54]].forEach(([x, z]) => { plate(g, x - 1.2, z - 1.2, x + 1.2, z + 1.2, M.mica, y, .14); plate(g, x - 1.2, z - 1.2, x - .9, z + 1.2, M.mica, y, .3); });
+    [[51, 29], [62, 74], [52, 72]].forEach(([x, z]) => { Cyl(g, .08, .14, M.mica, px(x), y + .07, pz(z)); const c = new THREE.Mesh(new THREE.ConeGeometry(.1, .3, 7), M.grass); c.position.set(px(x), y + .29, pz(z)); g.add(c); });
+    Ball(g, .05, mat(0xf26a3d), px(69.5), y + .06, pz(30.6)); Ball(g, .04, mat(0xffffff), px(70.6), y + .06, pz(31.4));
+    const rod2 = Cyl(g, .012, 28 * S, M.woodDark, px(24), y + 1.15, pz(75.4)); rod2.rotation.z = Math.PI / 2;
+    DR.cur2 = [13, 35].map(x => B(g, .5, .7, .04, M.curtain, px(x), y + .78, pz(75.3)));
+    plate(g, 8, 30, 15, 35, mat(0xd9ebf2), y, .35);
+  }
+  const F2 = floors[1], y2 = fy(1);
+  B(F2, .02, 1.25, 10 * S, M.acrylic, px(48), y2 + .625, pz(39));
+  const smokeMat = mat(0x2f6fd0, { emissive: 0xc23e2c, emissiveIntensity: 0 });
+  smokeMat.color.set(0xf4f4f2);
+  plate(F2, 31, 41, 37, 47, mat(0x6f7478), y2, .015);
+  const smokeBoard = Cyl(F2, .16, .07, smokeMat, px(34), y2 + .05, pz(44));
+  const smokeCan = Cyl(F2, .1, .04, M.silver, px(34), y2 + .1, pz(44));
+  const beacon = Cyl(F2, .05, .07, mat(0x1f2124, { emissive: 0xff3b2b, emissiveIntensity: 0 }), px(26), y2 + .95, pz(50));
+  B(F2, .008, .42, .008, M.black, px(26), y2 + 1.19, pz(50));
+  B(F2, .08, .08, .03, M.black, px(12), y2 + .7, pz(58) - .04);
+  const smokeLight = new THREE.PointLight(0xff3b2b, 0, 6, 2); smokeLight.position.set(px(26), y2 + .9, pz(44)); F2.add(smokeLight);
+  const puffMat = new THREE.MeshBasicMaterial({ color: 0xb4bcba, transparent: true, opacity: 0, depthWrite: false });
+  const puffs = [];
+  for (let i = 0; i < 34; i++) { const p = new THREE.Mesh(new THREE.SphereGeometry(.13 + Math.random() * .12, 8, 6), puffMat); p.position.set(px(8 + Math.random() * 36), y2 + Math.random() * 1.3, pz(30 + Math.random() * 26)); p.userData.v = .2 + Math.random() * .4; F2.add(p); puffs.push(p); }
+  lightDev('light2', F2, [[4, 26.3, 48, 26.3], [4.3, 26, 4.3, 76]], y2 + FH - .02, [26, y2 + 1.1, 44], 7);
+  [['Phòng tầng 2', 26, 42], ['Sân thượng', 70, 54], ['Vườn', 80, 32]].forEach(([t, x, z]) => label(1, t, x, y2 + FH + .2, z));
+
+  /* ================= Mái + pin mặt trời ================= */
+  scene.add(roof);
+  { const ry = fy(2) + FH + .03;
+    const sheetCv = document.createElement('canvas'); sheetCv.width = sheetCv.height = 64; const sc = sheetCv.getContext('2d');
+    sc.fillStyle = '#3f5c8c'; sc.fillRect(0, 0, 64, 64); sc.strokeStyle = '#33507d'; sc.lineWidth = 2; for (let i = 0; i < 64; i += 8) { sc.beginPath(); sc.moveTo(0, i); sc.lineTo(64, i); sc.moveTo(i, 0); sc.lineTo(i, 64); sc.stroke(); }
+    const sheetTex = new THREE.CanvasTexture(sheetCv); sheetTex.wrapS = sheetTex.wrapT = THREE.RepeatWrapping;
+    [[4, 26, 26, 36], [40, 26, 92, 36], [4, 36, 92, 60], [4, 60, 64, 76], [82, 60, 92, 76]].forEach(([a, b, c, d]) => { const t = sheetTex.clone(); t.needsUpdate = true; t.repeat.set((c - a) / 4, (d - b) / 4); plate(roof, a, b, c, d, new THREE.MeshStandardMaterial({ map: t, roughness: .9 }), ry, .04); });
+    const pvCv = document.createElement('canvas'); pvCv.width = 96; pvCv.height = 128; const pv = pvCv.getContext('2d');
+    const pg = pv.createLinearGradient(0, 0, 96, 128); pg.addColorStop(0, '#e6a9d6'); pg.addColorStop(1, '#b49ad8'); pv.fillStyle = pg; pv.fillRect(0, 0, 96, 128);
+    pv.strokeStyle = '#ffffff'; pv.lineWidth = 2; for (let x = 0; x <= 96; x += 16) { pv.beginPath(); pv.moveTo(x, 0); pv.lineTo(x, 128); pv.stroke(); } for (let yy = 0; yy <= 128; yy += 16) { pv.beginPath(); pv.moveTo(0, yy); pv.lineTo(96, yy); pv.stroke(); }
+    pv.lineWidth = 6; pv.strokeRect(0, 0, 96, 128);
+    const pvMat = new THREE.MeshStandardMaterial({ map: new THREE.CanvasTexture(pvCv), roughness: .4, metalness: .2 });
+    const panel = (x, z) => { const grp = new THREE.Group(); grp.position.set(px(x), ry + .12, pz(z)); grp.rotation.x = -.28; roof.add(grp); B(grp, 8 * S, .03, 10.5 * S, pvMat, 0, 0, 0); B(roof, .03, .14, .03, M.silver, px(x), ry + .07, pz(z + 4)); };
+    [16, 26, 36, 46, 56].forEach(x => panel(x, 36)); [21, 31, 41, 51].forEach(x => panel(x, 50));
+  }
+
+  /* ================= Thang máy (Arduino Uno, chỉ mô phỏng) ================= */
+  const EH = fy(2) + FH + .2;
+  const elev = new THREE.Group(); scene.add(elev);
+  B(elev, 18 * S, EH, T, M.elevGlass, px(73), EH / 2, pz(60)); B(elev, T, EH, 16 * S, M.elevGlass, px(64), EH / 2, pz(68));
+  B(elev, 18 * S, EH, T, M.elev, px(73), EH / 2, pz(76)); B(elev, T, EH, 16 * S, M.elev, px(82), EH / 2, pz(68));
+  B(elev, 18 * S, .06, 16 * S, M.elev, px(73), EH, pz(68));
+  const cabin = new THREE.Group(); cabin.position.set(px(73), .6, pz(68)); elev.add(cabin);
+  B(cabin, 15 * S, 1.15, 13 * S, M.cabin, 0, 0, 0);
+  let elevFloor = 1, elevTarget = 1;
+  labels.push({ f: -1, el: Object.assign(document.createElement('span'), { className: 'm-lbl', textContent: 'Thang máy' }), v: new THREE.Vector3(px(73), EH + .3, pz(68)) });
+  labelsEl.appendChild(labels[labels.length - 1].el);
+
+  /* ================= Tương tác ================= */
+  const Sm = () => backend === Sim;
+  const onOff = v => v ? 'đang sáng' : 'tắt';
+  const lightTip = (id, name) => () => { const on = isOn(D[id]) === true; return [name, onOff(on) + ' · bấm để ' + (on ? 'tắt' : 'bật')]; };
+  const toggleLight = id => () => command(id, 'toggle');
+  const simOnly = (act, liveText) => () => { if (Sm()) Sim.act(act); else flash(liveText); };
+  const add = (f, objs, tipFn, act) => objs.forEach(o => clickables.push({ f, o, tipFn, act }));
+  add(0, LIGHTS.light1.hits.concat(LIGHTS.light1.strips), lightTip('light1', 'Đèn LED tầng 1'), toggleLight('light1'));
+  add(1, LIGHTS.light2.hits.concat(LIGHTS.light2.strips), lightTip('light2', 'Đèn LED tầng 2'), toggleLight('light2'));
+  add(2, LIGHTS.light3.hits.concat(LIGHTS.light3.strips), lightTip('light3', 'Đèn LED tầng 3'), toggleLight('light3'));
+  ['wc1', 'wc2'].forEach((id, i) => add(0, LIGHTS[id].hits.concat(LIGHTS[id].strips), () => ['Đèn WC ' + (i + 1), onOff(isOn(D[id])) + (Sm() ? ' · bấm để giả lập có người' : ' · tự bật bằng cảm biến PIR')], simOnly(id, 'Đèn WC tự bật khi cảm biến PIR thấy người.')));
+  add(0, [gDoor], () => { const s = get(tree, D.garage.path); return ['Cửa cuốn nhà xe', (s === 'open' ? 'đang mở' : 'đã đóng') + ' · bấm để ' + (s === 'open' ? 'đóng' : 'mở')]; },
+      () => { if (backend && backend.pending && backend.pending.garage) return; command('garage', 'toggle'); });
+  add(0, [pir], () => { const en = get(tree, D.alarm.path) === true; return ['Cảm biến PIR báo trộm', (en ? 'đang canh gác' : 'đã tắt') + ' · bấm để ' + (en ? 'tắt' : 'bật')]; }, () => command('alarm', 'toggle'));
+  add(0, [lcd], () => ['LCD 16x2 · DHT11', 'Nhiệt độ ' + (get(tree, 'floor_1/temperature_1') ?? '—') + '°C · độ ẩm ' + (get(tree, 'floor_1/humidity_1') ?? '—') + '%'], () => {});
+  add(0, [keypad, door1Mesh], () => ['Cửa chính · bàn phím mật khẩu', Sm() ? 'bấm để giả lập nhập đúng mật khẩu' : 'nhập mật khẩu trên bàn phím của mạch'], simOnly('keypad', 'Cửa chính chỉ mở bằng bàn phím mật khẩu tại mạch.'));
+  add(0, fan.children, () => decoTip('fan'), () => toggleDeco('fan'));
+  add(1, [smokeBoard, smokeCan], () => { const m = get(tree, D.smoke.mute) === true; return ['Cảm biến khói MQ + còi', 'mức ' + (get(tree, D.smoke.path) ?? '—') + ' · còi ' + (m ? 'đã tắt' : 'đang bật') + ' · bấm để ' + (m ? 'bật' : 'tắt') + ' còi']; }, () => command('smoke', 'toggle'));
+  add(2, [finger, door3Mesh], () => ['Cửa mica tầng 3 · cảm biến vân tay', Sm() ? 'bấm để giả lập quét đúng vân tay' : 'quét vân tay trên cảm biến của mạch'], simOnly('finger', 'Cửa tầng 3 chỉ mở bằng vân tay tại mạch.'));
+  add(2, [buzz3], () => ['Còi tầng 3', 'bíp khi quét đúng vân tay'], () => {});
+  add(1, [beacon], () => { const m = get(tree, D.smoke.mute) === true; return ['Còi báo khói tầng 2', 'còi ' + (m ? 'đã tắt' : 'đang bật') + ' · bấm để ' + (m ? 'bật' : 'tắt')]; }, () => command('smoke', 'toggle'));
+  add(-1, cabin.children, () => ['Thang máy', 'chạy bằng Arduino Uno riêng, không nối mạng · dùng nút gọi tầng bên dưới'], () => {});
+
+  /* ===== Âm thanh (tạo bằng Web Audio, không cần file) ===== */
+  const Snd = {
+    ctx: null, on: true, lastSiren: 0, sirenHi: false,
+    init(){ try { if (!this.ctx) this.ctx = new (window.AudioContext || window.webkitAudioContext)(); if (this.ctx.state === 'suspended') this.ctx.resume(); } catch (e) {} },
+    tone(freq, dur, type, vol, when){
+      if (!this.on || !this.ctx || this.ctx.state !== 'running') return;
+      const t = this.ctx.currentTime + (when || 0), o = this.ctx.createOscillator(), g = this.ctx.createGain();
+      o.type = type || 'sine'; o.frequency.value = freq; g.gain.setValueAtTime(vol || .06, t); g.gain.exponentialRampToValueAtTime(.0001, t + dur);
+      o.connect(g).connect(this.ctx.destination); o.start(t); o.stop(t + dur + .02);
+    },
+    click(){ this.tone(900, .04, 'square', .025); },
+    up(){ this.tone(620, .07, 'sine', .07); this.tone(930, .1, 'sine', .07, .06); },
+    down(){ this.tone(560, .07, 'sine', .07); this.tone(370, .12, 'sine', .07, .06); },
+    door(){ this.tone(1050, .1, 'square', .035); this.tone(1400, .12, 'square', .035, .13); },
+    motor(){ this.tone(110, .9, 'sawtooth', .025); this.tone(116, .9, 'sawtooth', .02); },
+    ding(){ this.tone(1320, .5, 'sine', .06); this.tone(990, .7, 'sine', .05, .18); },
+    siren(tt){ if (tt - this.lastSiren < .45) return; this.lastSiren = tt; this.sirenHi = !this.sirenHi; this.tone(this.sirenHi ? 960 : 720, .42, 'square', .03); }
+  };
+  document.addEventListener('pointerdown', () => Snd.init(), true);
+  document.addEventListener('keydown', () => Snd.init(), true);
+
+  /* ===== Đồ vật trang trí bấm được (chỉ trên mô hình, không ghi Firebase) ===== */
+  const DECO = {};
+  function deco(key, name, onText, offText, on, apply){ DECO[key] = { name, onText, offText, on, apply }; apply(on); }
+  function toggleDeco(key){ const d = DECO[key]; d.on = !d.on; d.apply(d.on); Snd[d.on ? 'up' : 'down'](); renderPanel(); }
+  function decoTip(key){ const d = DECO[key]; return [d.name, (d.on ? d.onText : d.offText) + ' · bấm để đổi · chỉ trên mô hình']; }
+  const addDeco = (f, key, objs) => objs.forEach(o => clickables.push({ f, o, tipFn: () => decoTip(key), act: () => toggleDeco(key) }));
+  deco('fan', 'Quạt trần', 'đang quay', 'đang tắt', false, v => { fanOn = v; });
+  // Rèm: mở thì gom về hai bên, đóng thì kéo kín cửa sổ
+  DR.cur3.forEach((c, i) => { c.userData.open = { sx: 1, x: px(i ? 23.5 : 6.5) }; c.userData.shut = { sx: 3.6, x: px(i ? 20.5 : 9.5) }; });
+  DR.cur2.forEach((c, i) => { c.userData.open = { sx: .55, x: px(i ? 36.6 : 11.4) }; c.userData.shut = { sx: 2.8, x: px(i ? 31 : 17) }; });
+  const curTarget = c => c.userData.state === 'shut' ? c.userData.shut : c.userData.open;
+  deco('cur3', 'Rèm phòng rèm (tầng 3)', 'đang kéo kín', 'đang mở', false, v => DR.cur3.forEach(c => c.userData.state = v ? 'shut' : 'open'));
+  deco('cur2', 'Rèm cửa sổ tầng 2', 'đang kéo kín', 'đang mở', false, v => DR.cur2.forEach(c => c.userData.state = v ? 'shut' : 'open'));
+  addDeco(2, 'cur3', DR.cur3); addDeco(1, 'cur2', DR.cur2);
+  // TV trên kệ phòng rèm tầng 3
+  const tvCv = document.createElement('canvas'); tvCv.width = 256; tvCv.height = 144; const tvx = tvCv.getContext('2d');
+  const tvGrad = tvx.createLinearGradient(0, 0, 256, 144); tvGrad.addColorStop(0, '#1c6e68'); tvGrad.addColorStop(1, '#3a8fd6'); tvx.fillStyle = tvGrad; tvx.fillRect(0, 0, 256, 144);
+  tvx.fillStyle = '#fff'; tvx.font = '700 26px sans-serif'; tvx.fillText('Smart House', 46, 70); tvx.font = '16px sans-serif'; tvx.fillText('Kênh nhà thông minh', 52, 98);
+  const tvOn = new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(tvCv) }), tvOff = new THREE.MeshBasicMaterial({ color: 0x0d0f12 });
+  B(F3, .04, .56, .96, M.black, px(5.6), y3 + .66, pz(37));
+  const tv = new THREE.Mesh(new THREE.PlaneGeometry(.9, .5), tvOff); tv.rotation.y = Math.PI / 2; tv.position.set(px(5.6) + .025, y3 + .66, pz(37)); F3.add(tv);
+  const tvLight = new THREE.PointLight(0x5fb0ff, 0, 2.5, 2); tvLight.position.set(px(8), y3 + .7, pz(37)); F3.add(tvLight);
+  deco('tv', 'TV phòng rèm (tầng 3)', 'đang bật', 'đang tắt', false, v => { tv.material = v ? tvOn : tvOff; tvLight.intensity = v ? .8 : 0; });
+  addDeco(2, 'tv', [tv]);
+  // Đèn hồ bơi
+  const poolLight = new THREE.PointLight(0x4fd6ff, 0, 5, 2); poolLight.position.set(px(40), .25, pz(11)); F1.add(poolLight);
+  deco('pool', 'Đèn hồ bơi', 'đang sáng', 'đang tắt', false, v => { poolLight.intensity = v ? 1.6 : 0; M.water.emissiveIntensity = v ? 1.1 : .25; });
+  addDeco(0, 'pool', [DR.pool]);
+  // Đèn bàn phòng làm việc
+  const lampMat = mat(0xfff1d6, { emissive: 0xffc670, emissiveIntensity: 0 });
+  const lampParts = [Cyl(F1, .05, .02, M.black, px(82.5), .47, pz(52.5)), B(F1, .015, .24, .015, M.black, px(82.5), .59, pz(52.5)), Ball(F1, .06, lampMat, px(82.5), .73, pz(52))];
+  const lampLight = new THREE.PointLight(0xffc670, 0, 2.2, 2); lampLight.position.set(px(82), .66, pz(51.5)); F1.add(lampLight);
+  deco('desk', 'Đèn bàn phòng làm việc', 'đang sáng', 'đang tắt', false, v => { lampMat.emissiveIntensity = v ? 1.6 : 0; lampLight.intensity = v ? 1.2 : 0; });
+  addDeco(0, 'desk', lampParts);
+  // Đèn vườn sân thượng tầng 2
+  const gardenMat = mat(0xfff6d8, { emissive: 0xffd77a, emissiveIntensity: 0 }), gardenParts = [];
+  [68, 78, 88].forEach(x => { gardenParts.push(Cyl(F2, .012, .32, M.black, px(x), y2 + .16, pz(37.5)), Ball(F2, .04, gardenMat, px(x), y2 + .34, pz(37.5))); });
+  const gardenLight = new THREE.PointLight(0xffd77a, 0, 4, 2); gardenLight.position.set(px(78), y2 + .45, pz(33)); F2.add(gardenLight);
+  deco('garden', 'Đèn vườn sân thượng', 'đang sáng', 'đang tắt', false, v => { gardenMat.emissiveIntensity = v ? 1.8 : 0; gardenLight.intensity = v ? 1.3 : 0; });
+  addDeco(1, 'garden', gardenParts);
+  // Biển Bar phát sáng
+  const barLight = new THREE.PointLight(0xff4fa8, 0, 3, 2); barLight.position.set(px(10), y3 + .7, pz(67)); F3.add(barLight);
+  deco('bar', 'Biển Bar (tầng 3)', 'đang sáng', 'đang tắt', true, v => { DR.bar.material.color.set(v ? 0xffffff : 0x4a3a44); barLight.intensity = v ? .9 : 0; });
+  addDeco(2, 'bar', [DR.bar]);
+
+  /* ===== Cửa phòng tự mở khi có người lại gần ===== */
+  const autoDoors = [], doorMat = mat(0xe8e2d6);
+  function autoDoor(g, hx, hz, len, axis, sign){
+    const piv = new THREE.Group(); piv.position.set(px(hx), 0, pz(hz)); g.add(piv);
+    if (axis === 'x') B(piv, len * S, 1.12, .03, doorMat, len * S / 2, .56, 0); else B(piv, .03, 1.12, len * S, doorMat, 0, .56, len * S / 2);
+    autoDoors.push({ piv, cx: px(axis === 'x' ? hx + len / 2 : hx), cz: pz(axis === 'x' ? hz : hz + len / 2), sign, near: false });
+  }
+  autoDoor(F1, 70, 26, 3, 'x', 1); autoDoor(F1, 83, 26, 3, 'x', 1); autoDoor(F1, 62, 36, 4, 'x', 1); autoDoor(F1, 60, 38, 6, 'z', -1);
+
+  /* ===== Người trong nhà: đi dạo, vào WC 1 làm đèn tự bật (khi mô phỏng) ===== */
+  const npc = new THREE.Group(); F1.add(npc);
+  Cyl(npc, .055, .38, mat(0x3d7bd9), 0, .3, 0); Ball(npc, .052, mat(0xf1c9a5), 0, .55, 0); Cyl(npc, .055, .03, mat(0x2a1a12), 0, .595, 0);
+  Cyl(npc, .02, .12, mat(0x2b2b2b), -.026, .06, 0); Cyl(npc, .02, .12, mat(0x2b2b2b), .026, .06, 0);
+  const NPC_PATH = [[30, 40], [50, 40], [57, 41], [63, 41], [64, 33], [71.5, 31], [71.5, 22], [74, 16, 'wc1'], [71.5, 22], [71.5, 31], [64, 33], [63, 41], [57, 41], [40, 32], [22, 38]];
+  const npcSt = { i: 0, wait: 0, on: true };
+  npc.position.set(px(30), 0, pz(40));
+  function npcStep(dt){
+    npc.visible = npcSt.on; if (!npcSt.on) return;
+    if (npcSt.wait > 0) { npcSt.wait -= dt; return; }
+    const w = NPC_PATH[(npcSt.i + 1) % NPC_PATH.length], tx = px(w[0]), tz = pz(w[1]);
+    const dx = tx - npc.position.x, dz = tz - npc.position.z, d = Math.hypot(dx, dz), sp = .45 * dt;
+    if (d <= sp) { npc.position.x = tx; npc.position.z = tz; npcSt.i = (npcSt.i + 1) % NPC_PATH.length; if (w[2]) { npcSt.wait = 2.5; if (Sm()) Sim.act(w[2]); } }
+    else { npc.position.x += dx / d * sp; npc.position.z += dz / d * sp; npc.rotation.y = Math.atan2(dx, dz); }
+    npc.position.y = npcSt.wait > 0 ? 0 : Math.abs(Math.sin(performance.now() / 110)) * .012;
+  }
+  clickables.push({ f: 0, o: npc.children[1], tipFn: () => ['Người trong nhà', 'đi dạo quanh tầng 1; vào WC 1 thì cảm biến PIR bật đèn (khi mô phỏng)'], act: () => {} });
+
+  /* ===== Phòng, bảng điều khiển phòng, nhãn thiết bị ===== */
+  const ROOMS = [
+    { f: 0, name: 'Phòng khách', r: [4, 26, 60, 46], dev: ['light1', 'alarm', 'climate'], deco: ['fan'] },
+    { f: 0, name: 'Sân và hồ bơi', r: [0, -2, 68, 26], dev: [], deco: ['pool'] },
+    { f: 0, name: 'Nhà xe', r: [4, 46, 20, 76], dev: ['garage'], deco: [] },
+    { f: 0, name: 'Bếp và cầu thang', r: [20, 46, 44, 76], dev: [], deco: [] },
+    { f: 0, name: 'Sảnh, cửa chính', r: [44, 46, 64, 76], dev: ['door1'], deco: [] },
+    { f: 0, name: 'WC 1', r: [68, 6, 80, 26], dev: ['wc1'], deco: [] },
+    { f: 0, name: 'WC 2', r: [80, 6, 92, 26], dev: ['wc2'], deco: [] },
+    { f: 0, name: 'Phòng làm việc', r: [60, 26, 92, 76], dev: [], deco: ['desk'] },
+    { f: 1, name: 'Phòng tầng 2', r: [4, 26, 48, 76], dev: ['light2', 'smoke'], deco: ['cur2'] },
+    { f: 1, name: 'Sân thượng', r: [48, 26, 92, 76], dev: [], deco: ['garden'] },
+    { f: 2, name: 'Phòng rèm', r: [4, 26, 26, 50], dev: ['door3'], deco: ['cur3', 'tv'] },
+    { f: 2, name: 'Góc Bar', r: [4, 50, 18, 81], dev: ['light3'], deco: ['bar'] },
+    { f: 2, name: 'Không gian chung tầng 3', r: [18, 26, 92, 81], dev: ['light3', 'door3'], deco: ['bar'] }
+  ];
+  const SHORT = { light1: 'Đèn T1', alarm: 'Báo trộm', climate: 'DHT11', garage: 'Nhà xe', door1: 'Cửa chính', wc1: 'WC 1', wc2: 'WC 2', light2: 'Đèn T2', smoke: 'Báo khói', light3: 'Đèn T3', door3: 'Cửa vân tay' };
+  const SIM_FOR = { door1: 'keypad', door3: 'finger', wc1: 'wc1', wc2: 'wc2' };
+  const roomOf = id => ROOMS.find(r => r.dev.includes(id));
+  const planX = x => x / S + CX, planZ = z => z / S + CZ;
+  const roomAt = (f, X, Z) => ROOMS.find(r => r.f === f && X >= r.r[0] && X <= r.r[2] && Z >= r.r[1] && Z <= r.r[3]);
+  function stateOf(id){
+    const st = deviceState(tree, id), d = API_DEVICES[id];
+    switch (d.kind) {
+      case 'light': return { text: st.on == null ? 'chưa có dữ liệu' : st.on ? 'Bật' : 'Tắt', cls: st.on ? 'on' : '', on: st.on === true };
+      case 'auto': return { text: st.on ? 'Sáng (có người)' : 'Tắt', cls: st.on ? 'on' : '', on: st.on === true };
+      case 'door': return { text: st.open ? 'Đang mở' : 'Đã đóng', cls: st.open ? 'open' : '' };
+      case 'garage': return { text: st.status === 'open' ? 'Đang mở' : st.status === 'closed' ? 'Đã đóng' : 'chưa có dữ liệu', cls: st.status === 'open' ? 'open' : '', open: st.status === 'open' };
+      case 'alarm': return { text: st.triggered ? 'CÓ CHUYỂN ĐỘNG' : st.enabled ? 'Canh gác' : 'Đã tắt', cls: st.triggered ? 'alert' : st.enabled ? 'open' : '', on: st.enabled };
+      case 'smoke': return { text: st.detected ? 'CÓ KHÓI · ' + st.level : 'Bình thường · ' + (st.level ?? '—'), cls: st.detected ? 'alert' : '', on: !st.buzzerMuted };
+      case 'sensor': return { text: (typeof st.temperature === 'number' ? st.temperature.toFixed(1) : '—') + '°C · ' + (typeof st.humidity === 'number' ? Math.round(st.humidity) : '—') + '%', cls: '' };
+    }
+    return { text: '', cls: '' };
+  }
+  const panelEl = $('#room-panel'); let panelRoom = null;
+  function openPanel(r){ panelRoom = r; renderPanel(); }
+  function closePanel(){ panelRoom = null; renderPanel(); }
+  function renderPanel(){
+    if (!panelRoom) { panelEl.hidden = true; panelEl.dataset.html = ''; return; }
+    const r = panelRoom; let h = '<div class="m-ph"><div><b>' + r.name + '</b><small>Tầng ' + (r.f + 1) + ' · bấm sàn phòng khác để đổi</small></div><button type="button" class="m-x" data-close aria-label="Đóng bảng">×</button></div>';
+    r.dev.forEach(id => {
+      const d = API_DEVICES[id], st = stateOf(id); let ctrl = '';
+      if (d.kind === 'light' || d.kind === 'alarm') ctrl = '<button class="switch" type="button" data-dev="' + id + '" data-act="toggle" aria-pressed="' + !!st.on + '" aria-label="' + d.label + '"><span></span></button>';
+      else if (d.kind === 'smoke') ctrl = '<button class="switch" type="button" data-dev="smoke" data-act="toggle" aria-pressed="' + !!st.on + '" aria-label="Còi báo khói"><span></span></button>';
+      else if (d.kind === 'garage') ctrl = '<div class="btns"><button class="btn" type="button" data-dev="garage" data-act="open">Mở</button><button class="btn" type="button" data-dev="garage" data-act="close">Đóng</button></div>';
+      else if (SIM_FOR[id] && Sm()) ctrl = '<button class="btn" type="button" data-sim="' + SIM_FOR[id] + '">Giả lập</button>';
+      else ctrl = '<small>chỉ đọc</small>';
+      h += '<div class="m-row ' + (st.cls === 'alert' ? 'alert' : '') + '"><div>' + d.label + (d.kind === 'smoke' ? ' (công tắc là còi)' : '') + '<small>' + st.text + '</small></div>' + ctrl + '</div>';
+    });
+    r.deco.forEach(k => {
+      const d = DECO[k];
+      h += '<div class="m-row deco"><div>' + d.name + '<small>' + (d.on ? d.onText : d.offText) + ' · chỉ trên mô hình</small></div><button class="switch" type="button" data-deco="' + k + '" aria-pressed="' + d.on + '" aria-label="' + d.name + '"><span></span></button></div>';
+    });
+    if (!r.dev.length && !r.deco.length) h += '<p class="m-empty">Phòng này chưa gắn thiết bị nào.</p>';
+    if (panelEl.dataset.html !== h) { panelEl.innerHTML = h; panelEl.dataset.html = h; } panelEl.hidden = false;
+  }
+  panelEl.addEventListener('click', ev => {
+    const b = ev.target.closest('button'); if (!b) return;
+    if (b.hasAttribute('data-close')) return closePanel();
+    if (b.dataset.deco) return toggleDeco(b.dataset.deco);
+    if (b.dataset.sim) { if (Sm()) Sim.act(b.dataset.sim); Snd.click(); return; }
+    if (b.dataset.dev) { command(b.dataset.dev, b.dataset.act); Snd.click(); }
+  });
+  const BADGES = [
+    ['light1', 0, 30, FH - .12, 33], ['alarm', 0, 6, 1.32, 38.5], ['climate', 0, 6, 1.42, 31], ['garage', 0, 6, 1.18, 56], ['door1', 0, 52, 1.32, 76],
+    ['wc1', 0, 74, 1.32, 16], ['wc2', 0, 86, 1.32, 16], ['light2', 1, 26, fy(1) + 1.2, 40], ['smoke', 1, 34, fy(1) + .38, 44], ['light3', 2, 60, fy(2) + 1.2, 40], ['door3', 2, 26, fy(2) + 1.45, 43]
+  ].map(([id, f, x, y, z]) => {
+    const el = document.createElement('button'); el.type = 'button'; el.className = 'm-badge'; el.innerHTML = '<i></i><span></span>';
+    el.addEventListener('click', () => { Snd.click(); const d = API_DEVICES[id]; if (!d.readOnly) command(id, 'toggle'); else openPanel(roomOf(id)); });
+    $('#model-badges').appendChild(el);
+    return { id, f, el, v: new THREE.Vector3(px(x), y, pz(z)) };
+  });
+  let badgesOn = true;
+  function refreshBadges(){ BADGES.forEach(b => { const st = stateOf(b.id); b.el.className = 'm-badge ' + st.cls; b.el.lastChild.textContent = SHORT[b.id] + ' · ' + st.text; b.el.title = API_DEVICES[b.id].label + ': ' + st.text; }); }
+  function pickRoom(ev){
+    const r = canvas.getBoundingClientRect();
+    ptr.set(((ev.clientX - r.left) / r.width) * 2 - 1, -((ev.clientY - r.top) / r.height) * 2 + 1);
+    ray.setFromCamera(ptr, camera);
+    const list = floorMeshes.filter(o => floors[o.f] && floors[o.f].visible);
+    const hits = ray.intersectObjects(list.map(o => o.m), false); if (!hits.length) return null;
+    const f = list.find(o => o.m === hits[0].object).f;
+    return roomAt(f, planX(hits[0].point.x), planZ(hits[0].point.z)) || null;
+  }
+
+  /* ===== Viền sáng khi rê chuột ===== */
+  const hl = new THREE.BoxHelper(new THREE.Mesh(new THREE.BoxGeometry(.01, .01, .01)), 0x1c6e68);
+  hl.material.depthTest = false; hl.material.transparent = true; hl.renderOrder = 10; hl.visible = false; scene.add(hl);
+  function highlight(c){ if (c) { hl.setFromObject(c.o); hl.visible = true; } else hl.visible = false; }
+
+  /* ===== Công cụ: đêm, âm thanh, nhãn, người ===== */
+  let night = false;
+  const toolBtn = (id, fn) => { const b = $(id); b.addEventListener('click', () => { const v = b.getAttribute('aria-pressed') !== 'true'; b.setAttribute('aria-pressed', v); fn(v); Snd.click(); }); };
+  toolBtn('#t-night', v => { night = v; applyTheme(); });
+  toolBtn('#t-sound', v => { Snd.on = v; });
+  toolBtn('#t-badges', v => { badgesOn = v; });
+  toolBtn('#t-npc', v => { npcSt.on = v; });
+  const alertEl = $('#model-alert');
+
+  let view = 3;
+  const visibleClick = () => clickables.filter(c => c.f < view);
+  const ray = new THREE.Raycaster(), ptr = new THREE.Vector2();
+  function pick(ev){
+    const r = canvas.getBoundingClientRect();
+    ptr.set(((ev.clientX - r.left) / r.width) * 2 - 1, -((ev.clientY - r.top) / r.height) * 2 + 1);
+    ray.setFromCamera(ptr, camera);
+    const list = visibleClick(); const hits = ray.intersectObjects(list.map(c => c.o), false);
+    return hits.length ? list.find(c => c.o === hits[0].object) : null;
+  }
+  function showTip(c, ev){
+    const r = wrap.getBoundingClientRect(); const [a, b] = c.tipFn();
+    tip.innerHTML = ''; const bb = document.createElement('b'); bb.textContent = a; const s = document.createElement('span'); s.textContent = b; tip.append(bb, s);
+    tip.hidden = false;
+    const x = Math.min(ev.clientX - r.left + 14, r.width - tip.offsetWidth - 8), y = Math.min(ev.clientY - r.top + 14, r.height - tip.offsetHeight - 8);
+    tip.style.left = Math.max(8, x) + 'px'; tip.style.top = Math.max(8, y) + 'px';
+  }
+  let flashT = null;
+  function flash(t){ msg.textContent = t; clearTimeout(flashT); flashT = setTimeout(() => msg.textContent = '', 2600); }
+  canvas.addEventListener('pointermove', ev => {
+    if (walk.on && down) { walk.yaw -= (ev.clientX - walk.lx) * .005; walk.pitch = Math.max(-1.2, Math.min(1.2, walk.pitch - (ev.clientY - walk.ly) * .005)); walk.lx = ev.clientX; walk.ly = ev.clientY; return; }
+    if (walk.on) { if (ev.pointerType === 'mouse') { const c = pick(ev); const dev = c && c.o.parent !== cabin ? c : null; highlight(dev); const t = dev ? null : pickWalkTarget(ev); ghost.visible = !!t; if (t) ghost.position.set(t.x, t.y + .02, t.z); } return; }
+    if (ev.pointerType !== 'mouse') return; const c = pick(ev); canvas.style.cursor = c ? 'pointer' : 'grab'; highlight(c); if (c) showTip(c, ev); else tip.hidden = true; });
+  canvas.addEventListener('pointerleave', () => { tip.hidden = true; if (!walk.on) highlight(null); });
+  let down = null, tipT = null;
+  canvas.addEventListener('pointerdown', ev => { down = { x: ev.clientX, y: ev.clientY, t: performance.now() }; walk.lx = ev.clientX; walk.ly = ev.clientY; if (walk.on) { try { canvas.setPointerCapture(ev.pointerId); } catch (e) {} } });
+  canvas.addEventListener('pointercancel', () => { down = null; });
+  canvas.addEventListener('pointerup', ev => {
+    if (!down) return; const moved = Math.hypot(ev.clientX - down.x, ev.clientY - down.y); const quick = performance.now() - down.t < 600; down = null;
+    if (moved > 6 || !quick) return;
+    const c = pick(ev);
+    if (walk.on && (!c || c.o.parent === cabin)) { tip.hidden = true; const t = pickWalkTarget(ev); if (t) setDest(t); return; }
+    if (!c) { tip.hidden = true; const rm = pickRoom(ev); if (rm) { openPanel(rm); Snd.click(); } else closePanel(); return; }
+    c.act(); Snd.click();
+    setTimeout(() => { showTip(c, ev); clearTimeout(tipT); if (ev.pointerType !== 'mouse') tipT = setTimeout(() => tip.hidden = true, 2200); }, 120);
+  });
+  document.querySelectorAll('[data-elev]').forEach(b => b.addEventListener('click', () => {
+    if (walk.on && walk.inE && !walk.riding && cabinAt(walk.f)) walk.riding = Number(b.dataset.elev) !== walk.f + 1;
+    elevTarget = Number(b.dataset.elev);
+    document.querySelectorAll('[data-elev]').forEach(x => x.setAttribute('aria-pressed', x === b));
+    if (elevTarget !== elevFloor) log('Gọi thang máy lên tầng ' + elevTarget + ' (mô phỏng)', 'muted');
+  }));
+  let targetY = 1.6;
+  function setView(n){
+    if (walk.on) { if (n <= 3) walkTo(n - 1); return; }
+    view = n; floors.forEach((g, i) => g.visible = i < Math.min(n, 3)); roof.visible = n === 4;
+    if (panelRoom && panelRoom.f >= Math.min(n, 3)) closePanel();
+    document.querySelectorAll('[data-view]').forEach(x => x.setAttribute('aria-pressed', Number(x.dataset.view) === n));
+    targetY = n >= 3 ? 1.8 : fy(n - 1) + .5; tip.hidden = true;
+  }
+  document.querySelectorAll('[data-view]').forEach(b => b.addEventListener('click', () => setView(Number(b.dataset.view))));
+  setView(3);
+
+  /* ===== Chế độ đi vào nhà (góc nhìn người) ===== */
+  const SPAWN = [{ x: 50, z: 50, yaw: .35 }, { x: 40, z: 70, yaw: 0 }, { x: 64, z: 56, yaw: .45 }];
+  const EYE = .78, R = .1, SPEED = 1.5;
+  const walkBtn = $('#walk-btn'), walkUi = $('#walk-ui'), walkHint = $('#walk-hint');
+  const inStairs = (X, Z) => X >= 20 && X <= 42 && Z >= 66 && Z <= 76;
+  const inElevZone = (X, Z) => X >= 65 && X <= 81 && Z >= 61 && Z <= 75;
+  const cabinAt = f => Math.abs(cabin.position.y - (f * (FH + SL) + .6)) < .02;
+  function groundAt(f, x, z){
+    const X = planX(x), Z = planZ(z);
+    if (f <= 1 && inStairs(X, Z)) return Math.max(0, Math.min(fy(1), (42 - X) / 22 * fy(1)));
+    return fy(f);
+  }
+  const ringGeo = new THREE.RingGeometry(.07, .11, 28); ringGeo.rotateX(-Math.PI / 2);
+  const destRing = new THREE.Mesh(ringGeo, new THREE.MeshBasicMaterial({ color: 0x1c6e68, transparent: true, opacity: .9, depthTest: false }));
+  const ghost = new THREE.Mesh(ringGeo, new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: .55, depthTest: false }));
+  destRing.renderOrder = ghost.renderOrder = 11; destRing.visible = ghost.visible = false; scene.add(destRing, ghost);
+  function pickWalkTarget(ev){
+    const r = canvas.getBoundingClientRect();
+    ptr.set(((ev.clientX - r.left) / r.width) * 2 - 1, -((ev.clientY - r.top) / r.height) * 2 + 1);
+    ray.setFromCamera(ptr, camera);
+    const objs = floorMeshes.filter(o => o.f === walk.f || (walk.f <= 1 && o.f <= 1 && floors[o.f].visible)).map(o => o.m);
+    if (walk.f <= 1) objs.push(...stairMeshes);
+    objs.push(...cabin.children);
+    const hits = ray.intersectObjects(objs, false); if (!hits.length) return null;
+    const h = hits[0];
+    if (h.object.parent === cabin) return { x: px(73), z: pz(68), y: cabin.position.y - .6 };
+    return { x: h.point.x, z: h.point.z, y: h.point.y };
+  }
+  let helpT = null;
+  const helpEl = document.querySelector('.m-help');
+  function hideHelp(){ clearTimeout(helpT); if (helpEl) helpEl.hidden = true; }
+  function setDest(t){ hideHelp(); walk.dest = { x: t.x, z: t.z }; walk.stuck = 0; destRing.position.set(t.x, t.y + .02, t.z); destRing.visible = true; Snd.click(); }
+  function stopDest(){ walk.dest = null; destRing.visible = false; }
+  canvas.addEventListener('wheel', ev => {
+    if (!walk.on || walk.riding) return; ev.preventDefault(); stopDest();
+    const st = Math.max(-.35, Math.min(.35, -ev.deltaY * .0025));
+    const dx = -Math.sin(walk.yaw) * st, dz = -Math.cos(walk.yaw) * st;
+    if (!blocked(walk.x + dx, walk.z)) walk.x += dx;
+    if (!blocked(walk.x, walk.z + dz)) walk.z += dz;
+  }, { passive: false });
+  function setWalkFloor(f){
+    walk.f = f; view = f + 1; floors.forEach((g, i) => g.visible = i <= f);
+    document.querySelectorAll('[data-view]').forEach(x => x.setAttribute('aria-pressed', Number(x.dataset.view) === f + 1));
+  }
+  function callElevator(n){
+    if (walk.inE && !walk.riding && cabinAt(walk.f) && n !== walk.f + 1) walk.riding = true;
+    elevTarget = n; document.querySelectorAll('[data-elev]').forEach(x => x.setAttribute('aria-pressed', Number(x.dataset.elev) === n));
+  }
+  function blocked(x, z){
+    const fy0 = groundAt(walk.f, x, z), lo = fy0 + .08, hi = fy0 + EYE;
+    if (x < px(1) || x > px(95) || z < pz(-1) || z > pz(81)) return true;
+    for (const c of colliders) if (c.y1 > lo && c.y0 < hi && x > c.x0 - R && x < c.x1 + R && z > c.z0 - R && z < c.z1 + R) return true;
+    return false;
+  }
+  function walkTo(f){
+    stopDest(); walk.f = f; const sp = SPAWN[f]; walk.x = px(sp.x); walk.z = pz(sp.z); walk.yaw = sp.yaw; walk.pitch = -.08;
+    view = f + 1; floors.forEach((g, i) => g.visible = i <= f); roof.visible = false;
+    document.querySelectorAll('[data-view]').forEach(x => x.setAttribute('aria-pressed', Number(x.dataset.view) === f + 1));
+    elevTarget = f + 1; document.querySelectorAll('[data-elev]').forEach(x => x.setAttribute('aria-pressed', Number(x.dataset.elev) === f + 1));
+  }
+  function setWalk(on){
+    walk.on = on; walkUi.hidden = !on; tip.hidden = true; walkHint.hidden = true; walk.riding = false; highlight(null); closePanel(); stopDest(); ghost.visible = false; wrap.classList.toggle('walking', on); if (on && helpEl) { helpEl.hidden = false; clearTimeout(helpT); helpT = setTimeout(hideHelp, 10000); }
+    walkBtn.textContent = on ? 'Thoát, xem toàn cảnh' : 'Đi vào nhà';
+    const roofBtn = document.querySelector('[data-view="4"]'); if (roofBtn) roofBtn.disabled = on;
+    if (on) {
+      walk.saved = { pos: camera.position.clone(), target: controls.target.clone(), view };
+      controls.enabled = false; camera.fov = 68; camera.updateProjectionMatrix();
+      walkTo(Math.max(0, Math.min(2, (view >= 4 ? 1 : view) - 1)));
+      canvas.style.cursor = '';
+    } else {
+      controls.enabled = true; camera.fov = 36; camera.updateProjectionMatrix();
+      camera.rotation.set(0, 0, 0);
+      if (walk.saved) { camera.position.copy(walk.saved.pos); controls.target.copy(walk.saved.target); setView(walk.saved.view); }
+      walk.keys = {}; walk.pad = {};
+    }
+  }
+  walkBtn.addEventListener('click', () => setWalk(!walk.on));
+  const KEYMAP = { KeyW: 'f', ArrowUp: 'f', KeyS: 'b', ArrowDown: 'b', KeyA: 'l', ArrowLeft: 'l', KeyD: 'r', ArrowRight: 'r' };
+  addEventListener('keydown', ev => {
+    if (!walk.on || /INPUT|TEXTAREA|SELECT/.test(ev.target.tagName)) return;
+    if (KEYMAP[ev.code]) { walk.keys[KEYMAP[ev.code]] = true; ev.preventDefault(); }
+    if (ev.code === 'KeyE' || ev.code === 'Enter') { const c = centerPick(); if (c) { c.act(); walk.hintN = 0; } ev.preventDefault(); }
+    if (ev.code === 'Escape') setWalk(false);
+    if (/^Digit[123]$/.test(ev.code) && walk.inE) { callElevator(Number(ev.code.slice(-1))); ev.preventDefault(); }
+  });
+  addEventListener('keyup', ev => { if (KEYMAP[ev.code]) walk.keys[KEYMAP[ev.code]] = false; });
+  addEventListener('blur', () => { walk.keys = {}; walk.pad = {}; });
+  document.querySelectorAll('[data-move]').forEach(b => {
+    const k = b.dataset.move;
+    b.addEventListener('pointerdown', ev => { walk.pad[k] = true; try { b.setPointerCapture(ev.pointerId); } catch (e) {} ev.preventDefault(); });
+    ['pointerup', 'pointercancel', 'pointerleave'].forEach(t => b.addEventListener(t, () => walk.pad[k] = false));
+  });
+  const center = new THREE.Vector2(0, 0);
+  function centerPick(){
+    ray.setFromCamera(center, camera);
+    const list = visibleClick(); const hits = ray.intersectObjects(list.map(c => c.o), false);
+    return hits.length && hits[0].distance < 3.2 ? list.find(c => c.o === hits[0].object) : null;
+  }
+  function walkStep(dt){
+    const m = Object.assign({}, walk.keys); Object.keys(walk.pad).forEach(k => { if (walk.pad[k]) m[k] = true; });
+    const fwd = (m.f ? 1 : 0) - (m.b ? 1 : 0), side = (m.r ? 1 : 0) - (m.l ? 1 : 0);
+    if ((fwd || side) && walk.dest) stopDest();
+    if (walk.dest && !walk.riding) {
+      const dx = walk.dest.x - walk.x, dz = walk.dest.z - walk.z, d = Math.hypot(dx, dz);
+      if (d < .06) stopDest();
+      else {
+        const sp = Math.min(d, SPEED * .8 * dt), ux = dx / d, uz = dz / d, ox = walk.x, oz = walk.z;
+        if (!blocked(walk.x + ux * sp, walk.z)) walk.x += ux * sp;
+        if (!blocked(walk.x, walk.z + uz * sp)) walk.z += uz * sp;
+        const want = Math.atan2(-ux, -uz); let dy = want - walk.yaw; dy = Math.atan2(Math.sin(dy), Math.cos(dy)); walk.yaw += dy * Math.min(1, dt * 5);
+        walk.stuck = Math.hypot(walk.x - ox, walk.z - oz) < sp * .15 ? walk.stuck + dt : 0;
+        if (walk.stuck > .4) { stopDest(); walkHint.textContent = 'Không đi thẳng tới đó được, thử bấm chỗ khác'; walkHint.hidden = false; walk.hintN = 1; }
+      }
+    }
+    if ((fwd || side) && !walk.riding) {
+      const len = Math.hypot(fwd, side), sp = SPEED * dt / len;
+      const dx = (-Math.sin(walk.yaw) * fwd + Math.cos(walk.yaw) * side) * sp, dz = (-Math.cos(walk.yaw) * fwd - Math.sin(walk.yaw) * side) * sp;
+      if (!blocked(walk.x + dx, walk.z)) walk.x += dx;
+      if (!blocked(walk.x, walk.z + dz)) walk.z += dz;
+    }
+    const X = planX(walk.x), Z = planZ(walk.z);
+    // Cầu thang giữa tầng 1 và tầng 2
+    if (walk.f === 0 && inStairs(X, Z) && X < 22.5) { setWalkFloor(1); if (!walk.dest || planX(walk.dest.x) > 19) setDest({ x: px(17.5), z: walk.z, y: fy(1) }); }
+    else if (walk.f === 1 && inStairs(X, Z) && X > 24) { setWalkFloor(0); floors[1].visible = true; }
+    // Thang máy
+    walk.inE = inElevZone(X, Z);
+    let ground = groundAt(walk.f, walk.x, walk.z);
+    if (walk.riding) {
+      stopDest();
+      ground = cabin.position.y - .6;
+      floors.forEach((g, i) => g.visible = i <= Math.max(walk.f, elevTarget - 1));
+      if (cabinAt(elevTarget - 1)) { walk.riding = false; setWalkFloor(elevTarget - 1); ground = fy(walk.f); Snd.ding(); }
+    } else if (Math.hypot(Math.max(0, 65 - X, X - 81), Math.max(0, 61 - Z, Z - 75)) < 5 && elevTarget !== walk.f + 1) {
+      callElevator(walk.f + 1);
+    }
+    camera.position.set(walk.x, ground + EYE, walk.z);
+    camera.rotation.set(walk.pitch, walk.yaw, 0, 'YXZ');
+    if (++walk.hintN % 8 === 0) {
+      const c = centerPick(); highlight(c);
+      if (walk.inE) { walkHint.textContent = walk.riding ? 'Thang máy đang chạy lên tầng ' + elevTarget + '…' : cabinAt(walk.f) ? 'Trong thang máy · bấm 1, 2 hoặc 3 để chọn tầng' : 'Đang chờ thang máy xuống…'; walkHint.hidden = false; }
+      else if (c) { const [a, b] = c.tipFn(); walkHint.textContent = a + ' · ' + b; walkHint.hidden = false; } else walkHint.hidden = true;
+    }
+  }
+
+  /* Nền cảnh theo giao diện sáng/tối */
+  function applyTheme(){
+    const cs = getComputedStyle(document.documentElement); const v = n => cs.getPropertyValue(n).trim() || '#888888';
+    const dark = new THREE.Color(v('--paper')).getHSL({}).l < .5;
+    hl.material.color.set(v('--accent'));
+    if (night) { scene.background = new THREE.Color(0x0a1224); hemi.intensity = .14; sun.intensity = .03; return; }
+    scene.background = new THREE.Color(v('--tile'));
+    hemi.intensity = dark ? .55 : .85; sun.intensity = dark ? .35 : .5;
+  }
+  applyTheme();
+  try { matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applyTheme); } catch (e) {}
+  new MutationObserver(applyTheme).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+
+  const baseDir = camera.position.clone().sub(controls.target), baseLen = baseDir.length(); baseDir.normalize();
+  function resize(){
+    const w = wrap.clientWidth, h = wrap.clientHeight; if (!w || !h) return;
+    renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix();
+    if (walk.on) return;
+    const far = camera.aspect < 0.8 ? 1.7 : camera.aspect < 1.3 ? 1.25 : 1;
+    camera.position.copy(controls.target).addScaledVector(baseDir, baseLen * far);
+  }
+  resize(); if (window.ResizeObserver) new ResizeObserver(resize).observe(wrap); else addEventListener('resize', resize);
+
+  const tgt = { door1: 0, door3: 0, garage: 1, alarmOn: false, trig: false, smokeLvl: 0, smokeDet: false, mute: false };
+  let lastLcd = '', prevSnd = null;
+  function update(t){
+    const snap = { l: {}, d1: get(t, D.door1.path) === true, d3: get(t, D.door3.path) === true, g: get(t, D.garage.path), trig: get(t, D.alarm.trig) === true };
+    Object.keys(LIGHTS).forEach(id => snap.l[id] = isOn(D[id]) === true);
+    if (prevSnd) {
+      Object.keys(snap.l).forEach(id => { if (snap.l[id] !== prevSnd.l[id]) Snd[snap.l[id] ? 'up' : 'down'](); });
+      if ((snap.d1 && !prevSnd.d1) || (snap.d3 && !prevSnd.d3)) Snd.door();
+      if (snap.g !== prevSnd.g || (backend && backend.pending && backend.pending.garage && !prevSnd.pg)) Snd.motor();
+    }
+    snap.pg = !!(backend && backend.pending && backend.pending.garage); prevSnd = snap;
+    Object.keys(LIGHTS).forEach(id => LIGHTS[id].on = isOn(D[id]) === true);
+    tgt.door1 = get(t, D.door1.path) === true ? 1.3 : 0;
+    tgt.door3 = get(t, D.door3.path) === true ? -1.3 : 0;
+    tgt.garage = get(t, D.garage.path) === 'open' ? .06 : 1;
+    tgt.alarmOn = get(t, D.alarm.path) === true; tgt.trig = get(t, D.alarm.trig) === true;
+    tgt.smokeLvl = Number(get(t, D.smoke.path)) || 0; tgt.smokeDet = get(t, D.smoke.detected) === true; tgt.mute = get(t, D.smoke.mute) === true;
+    const temp = get(t, 'floor_1/temperature_1'), humi = get(t, 'floor_1/humidity_1');
+    const key = temp + '|' + humi; if (key !== lastLcd) { lastLcd = key; drawLcd(temp, humi); }
+    refreshBadges(); if (panelRoom) renderPanel();
+    const msgs = [];
+    if (tgt.trig) msgs.push('Báo trộm: có chuyển động ở tầng 1');
+    if (tgt.smokeDet) msgs.push('Báo cháy: có khói ở tầng 2' + (tgt.mute ? ' (còi đã tắt)' : ''));
+    alertEl.textContent = msgs.join(' · '); alertEl.hidden = !msgs.length; wrap.classList.toggle('alarm', msgs.length > 0);
+  }
+
+  const clock = new THREE.Clock(), v3 = new THREE.Vector3();
+  const lerp = (a, b, k) => a + (b - a) * k;
+  function frame(){
+    requestAnimationFrame(frame);
+    if (document.hidden) return;
+    const dt = Math.min(.05, clock.getDelta()), tt = clock.elapsedTime, k = 1 - Math.pow(.002, dt);
+    Object.values(LIGHTS).forEach(L => { L.strips.forEach(s => s.material.emissiveIntensity = lerp(s.material.emissiveIntensity, L.on ? 1.8 : 0, k)); L.pl.intensity = lerp(L.pl.intensity, L.on ? (night ? 1.7 : 1.2) : 0, k); });
+    DR.cur3.concat(DR.cur2).forEach(c => { const g = curTarget(c); c.scale.x = lerp(c.scale.x, g.sx, k * .5); c.position.x = lerp(c.position.x, g.x, k * .5); });
+    npcStep(dt);
+    autoDoors.forEach(d => {
+      const near = (walk.on && walk.f === 0 && Math.hypot(camera.position.x - d.cx, camera.position.z - d.cz) < .6) || (npc.visible && Math.hypot(npc.position.x - d.cx, npc.position.z - d.cz) < .6);
+      if (near && !d.near && walk.on) Snd.tone(300, .25, 'triangle', .03);
+      d.near = near; d.piv.rotation.y = lerp(d.piv.rotation.y, near ? 1.45 * d.sign : 0, k * .5);
+    });
+    if (tgt.trig || (tgt.smokeDet && !tgt.mute)) Snd.siren(tt);
+    door1.rotation.y = lerp(door1.rotation.y, tgt.door1, k * .6);
+    door3.rotation.y = lerp(door3.rotation.y, tgt.door3, k * .6);
+    keyLed.material.emissiveIntensity = tgt.door1 ? 2 : 0;
+    finger.material.emissiveIntensity = tgt.door3 ? 2 : .25 + .15 * Math.sin(tt * 2);
+    gPivot.scale.y = lerp(gPivot.scale.y, tgt.garage, k * .35);
+    if (fanOn) fan.rotation.y += dt * 9;
+    const blink = Math.sin(tt * 12) > 0;
+    alarmLight.intensity = tgt.trig ? (blink ? 2.6 : .2) : 0;
+    pirMat.emissiveIntensity = tgt.trig ? (blink ? 1.2 : .1) : (tgt.alarmOn ? .18 : 0);
+    const ring = tgt.smokeDet && !tgt.mute;
+    smokeLight.intensity = ring ? (blink ? 2.4 : .2) : 0;
+    beacon.material.emissiveIntensity = ring ? (blink ? 2 : .1) : 0;
+    smokeMat.emissiveIntensity = tgt.smokeDet ? .5 : 0;
+    const want = tgt.smokeLvl > 120 ? Math.min(.5, (tgt.smokeLvl - 60) / 520) : 0;
+    puffMat.opacity = lerp(puffMat.opacity, want, k * .5);
+    if (puffMat.opacity > .01) puffs.forEach(p => { p.position.y += p.userData.v * dt; if (p.position.y > y2 + 1.35) p.position.y = y2 + .05; });
+    const ey = (elevTarget - 1) * (FH + SL) + .6;
+    if (Math.abs(cabin.position.y - ey) > .01) {
+      cabin.position.y += Math.sign(ey - cabin.position.y) * Math.min(1.2 * dt, Math.abs(ey - cabin.position.y));
+      if (Math.abs(cabin.position.y - ey) <= .01 && elevFloor !== elevTarget) { elevFloor = elevTarget; log('Thang máy đã đến tầng ' + elevFloor, 'muted'); }
+    }
+    if (walk.on) walkStep(dt);
+    else { controls.target.y = lerp(controls.target.y, targetY, k * .4); controls.update(); }
+    renderer.render(scene, camera);
+    const w = wrap.clientWidth, h = wrap.clientHeight;
+    BADGES.forEach(b => {
+      let show = badgesOn && floors[b.f].visible;
+      if (show) show = walk.on ? (b.f === walk.f && b.v.distanceTo(camera.position) < 3.6) : (view <= 3 && b.f === view - 1);
+      if (show) { v3.copy(b.v).project(camera); show = v3.z < 1 && Math.abs(v3.x) < 1 && Math.abs(v3.y) < 1; }
+      b.el.hidden = !show; if (show) { b.el.style.left = ((v3.x + 1) / 2 * w) + 'px'; b.el.style.top = ((-v3.y + 1) / 2 * h) + 'px'; }
+    });
+    labels.forEach(l => {
+      const show = !walk.on && (l.f === -1 || (!badgesOn && l.f === view - 1));
+      v3.copy(l.v).project(camera); const vis = show && v3.z < 1 && Math.abs(v3.x) < 1.05 && Math.abs(v3.y) < 1.05;
+      l.el.hidden = !vis; if (vis) { l.el.style.left = ((v3.x + 1) / 2 * w) + 'px'; l.el.style.top = ((-v3.y + 1) / 2 * h) + 'px'; }
+    });
+  }
+  frame();
+  return { update };
+}
+Model = buildModel();
+
+goSim();
+})();
+</script>
+
+</body>
+</html>
