@@ -4,7 +4,7 @@
 
 // ==== CẤU HÌNH WI-FI & FIREBASE ====
 #define WIFI_SSID "Tesla_physics"
-#define WIFI_PASSWORD "top102102"
+#define WIFI_PASSWORD "DIEN_MAT_KHAU_WIFI"
 #define API_KEY "AIzaSyBom2FOJvMisw2NcE89Zkr-rP_dgOSqbMY"
 #define DATABASE_URL "https://smart-house-fcd4f-default-rtdb.asia-southeast1.firebasedatabase.app/"
 #define USER_EMAIL "DIEN_EMAIL_TAI_KHOAN_MACH"

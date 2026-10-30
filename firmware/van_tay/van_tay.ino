@@ -9,7 +9,7 @@
 
 // --- WiFi & Firebase config ---
 #define WIFI_SSID       "Tesla_physics"
-#define WIFI_PASSWORD   "top102102"
+#define WIFI_PASSWORD   "DIEN_MAT_KHAU_WIFI"
 
 #define API_KEY         "AIzaSyBom2FOJvMisw2NcE89Zkr-rP_dgOSqbMY"
 #define DATABASE_URL    "https://smart-house-fcd4f-default-rtdb.asia-southeast1.firebasedatabase.app/"
@@ -31,9 +31,13 @@ const int openPos = 180;
 const int closePos = 0;
 
 // --- Firebase objects ---
-FirebaseData fbdo;
+FirebaseData fbdo;    // ghi trạng thái
+FirebaseData stream;  // nhận lệnh đèn từ web
 FirebaseAuth auth;
 FirebaseConfig config;
+bool firebaseStarted = false;
+bool streamStarted = false;
+unsigned long lastStreamTry = 0;
 
 // --- Biến trạng thái vân tay ---
 int lastFingerprintID = -1;
@@ -68,6 +72,8 @@ void initFirebase() {
 
   Firebase.begin(&config, &auth);
   Firebase.reconnectNetwork(true);
+  stream.setBSSLBufferSize(2048, 512);
+  firebaseStarted = true;
 
   Serial.println("🔄 Đang kết nối Firebase...");
   unsigned long timeout = millis();
@@ -103,6 +109,35 @@ void initFirebase() {
     Firebase.RTDB.setString(&fbdo, "home/thongbao", "ESP8266 tầng 3 đã kết nối");
   } else {
     Serial.println("❌ Firebase connection failed!");
+  }
+}
+
+// --- Nhận lệnh đèn từ Firebase ---
+// Stream giữ một kết nối mở và chỉ nhận dữ liệu khi giá trị đổi. Bản cũ đọc đèn mỗi 0,2 giây,
+// làm cạn hạn mức tải xuống của gói Firebase miễn phí.
+void readLightStream() {
+  if (!Firebase.ready()) return;
+
+  if (!streamStarted) {
+    if (lastStreamTry != 0 && millis() - lastStreamTry < 5000) return;
+    lastStreamTry = millis();
+    streamStarted = Firebase.RTDB.beginStream(&stream, "/home/light_room_3");
+    if (!streamStarted) {
+      Serial.print("❌ Lỗi mở stream: ");
+      Serial.println(stream.errorReason());
+    }
+    return;
+  }
+
+  if (!Firebase.RTDB.readStream(&stream)) {
+    Serial.print("❌ Lỗi đọc stream: ");
+    Serial.println(stream.errorReason());
+  }
+  if (stream.streamAvailable() && stream.dataType() == "boolean") {
+    bool lightState = stream.boolData();
+    digitalWrite(LIGHT_RELAY_PIN, lightState ? HIGH : LOW);
+    Serial.print("💡 Trạng thái relay đèn: ");
+    Serial.println(lightState ? "BẬT" : "TẮT");
   }
 }
 
@@ -189,21 +224,12 @@ void setup() {
 }
 
 void loop() {
-  // Lấy trạng thái đèn từ Firebase để điều khiển relay
-  if (WiFi.status() == WL_CONNECTED && Firebase.ready()) {
-    if (Firebase.RTDB.getBool(&fbdo, "home/light_room_3")) {
-      bool lightState = fbdo.boolData();
-      digitalWrite(LIGHT_RELAY_PIN, lightState ? HIGH : LOW);
-      Serial.print("💡 Trạng thái relay đèn: ");
-      Serial.println(lightState ? "BẬT" : "TẮT");
-    } else {
-      Serial.print("❌ Lỗi đọc trạng thái đèn: ");
-      Serial.println(fbdo.errorReason());
-    }
-  } else {
-    Serial.println("🔌 Mất kết nối WiFi/Firebase, thử lại...");
-    initWiFi();
-    initFirebase();
+  // Lấy trạng thái đèn từ Firebase để điều khiển relay. Mất mạng thì thư viện Firebase tự nối
+  // lại WiFi (reconnectNetwork), trong lúc đó cửa vân tay vẫn dùng được.
+  if (firebaseStarted) {
+    readLightStream();
+  } else if (WiFi.status() == WL_CONNECTED) {
+    initFirebase();  // lúc khởi động chưa có WiFi
   }
 
   // Quét vân tay

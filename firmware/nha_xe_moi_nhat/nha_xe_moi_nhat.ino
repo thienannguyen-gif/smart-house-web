@@ -4,14 +4,17 @@
 
 // ==== Thông tin Wi-Fi & Firebase ====
 #define WIFI_SSID "Tesla_physics"
-#define WIFI_PASSWORD "top102102"
+#define WIFI_PASSWORD "DIEN_MAT_KHAU_WIFI"
 
 #define API_KEY "AIzaSyBom2FOJvMisw2NcE89Zkr-rP_dgOSqbMY"
 #define DATABASE_URL "https://smart-house-fcd4f-default-rtdb.asia-southeast1.firebasedatabase.app/"
 #define USER_EMAIL "DIEN_EMAIL_TAI_KHOAN_MACH"
 #define USER_PASSWORD "DIEN_MAT_KHAU_TAI_KHOAN_MACH"
 
-FirebaseData fbdo;
+#define COMMAND_PATH "/home/floor_1/garage/command"
+
+FirebaseData fbdo;    // ghi trạng thái cửa
+FirebaseData stream;  // nhận lệnh từ web
 FirebaseAuth auth;
 FirebaseConfig config;
 
@@ -28,6 +31,11 @@ bool isRunning = false;
 int currentDirection = 0; // 0: stop, 1: up, 2: down
 
 String lastCommand = "";
+String pendingCommand = "";  // lệnh từ web đến lúc motor đang chạy, xử lý khi motor dừng
+bool fromButton = false;     // lần chạy hiện tại do nút nhấn tại chỗ
+
+bool streamStarted = false;
+unsigned long lastStreamTry = 0;
 
 void setup() {
   Serial.begin(9600);
@@ -55,45 +63,64 @@ void setup() {
   config.token_status_callback = tokenStatusCallback;
   Firebase.begin(&config, &auth);
   Firebase.reconnectNetwork(true);
+  stream.setBSSLBufferSize(2048, 512);
+}
+
+// ==== Nhận lệnh từ Firebase ====
+// Stream giữ một kết nối mở và chỉ nhận dữ liệu khi lệnh đổi. Bản cũ đọc lệnh ở mỗi vòng
+// loop(), hàng chục request mỗi giây, làm cạn hạn mức tải xuống của gói Firebase miễn phí.
+void readCommandStream() {
+  if (!Firebase.ready()) return;
+
+  if (!streamStarted) {
+    if (lastStreamTry != 0 && millis() - lastStreamTry < 5000) return;
+    lastStreamTry = millis();
+    streamStarted = Firebase.RTDB.beginStream(&stream, COMMAND_PATH);
+    if (!streamStarted) {
+      Serial.print("Lỗi mở stream: ");
+      Serial.println(stream.errorReason());
+    }
+    return;
+  }
+
+  if (!Firebase.RTDB.readStream(&stream)) {
+    Serial.print("Lỗi đọc stream: ");
+    Serial.println(stream.errorReason());
+  }
+  if (stream.streamAvailable() && stream.dataType() == "string") {
+    pendingCommand = stream.stringData();
+  }
+}
+
+void startRun(int direction, const String &cmd, bool button) {
+  if (direction == 1) rollUp();
+  else rollDown();
+  startTime = millis();
+  isRunning = true;
+  currentDirection = direction;
+  lastCommand = cmd;
+  fromButton = button;
 }
 
 void loop() {
-  // ==== Đọc lệnh từ Firebase ====
-  if (Firebase.ready() && !isRunning) {
-    if (Firebase.RTDB.getString(&fbdo, "/home/floor_1/garage/command")) {
-      String cmd = fbdo.stringData();
-      if (cmd != lastCommand) {
-        if (cmd == "open") {
-          rollUp();
-          startTime = millis();
-          isRunning = true;
-          currentDirection = 1;
-          lastCommand = cmd;
-        } else if (cmd == "close") {
-          rollDown();
-          startTime = millis();
-          isRunning = true;
-          currentDirection = 2;
-          lastCommand = cmd;
-        }
-      }
+  readCommandStream();
+
+  // ==== Lệnh từ web ====
+  if (!isRunning && pendingCommand.length() > 0) {
+    String cmd = pendingCommand;
+    pendingCommand = "";
+    if (cmd != lastCommand) {
+      if (cmd == "open") startRun(1, cmd, false);
+      else if (cmd == "close") startRun(2, cmd, false);
     }
   }
 
   // ==== Kiểm tra nút nhấn vật lý ====
   if (!isRunning) {
     if (digitalRead(BUTTON_UP) == LOW) {
-      rollUp();
-      startTime = millis();
-      isRunning = true;
-      currentDirection = 1;
-      lastCommand = "open";
+      startRun(1, "open", true);
     } else if (digitalRead(BUTTON_DOWN) == LOW) {
-      rollDown();
-      startTime = millis();
-      isRunning = true;
-      currentDirection = 2;
-      lastCommand = "close";
+      startRun(2, "close", true);
     }
   }
 
@@ -103,11 +130,14 @@ void loop() {
     isRunning = false;
     currentDirection = 0;
 
-    // Cập nhật trạng thái cửa lên Firebase
-    if (lastCommand == "open") {
-      Firebase.RTDB.setString(&fbdo, "/home/floor_1/garage/status", "open");
-    } else if (lastCommand == "close") {
-      Firebase.RTDB.setString(&fbdo, "/home/floor_1/garage/status", "closed");
+    // Cập nhật trạng thái cửa lên Firebase sau khi motor đã dừng, trong một request.
+    // Bấm nút tại chỗ thì ghi cả lệnh, để web hiện đúng và lệnh kế tiếp từ web vẫn là một thay đổi.
+    FirebaseJson json;
+    json.set("status", lastCommand == "open" ? "open" : "closed");
+    if (fromButton) json.set("command", lastCommand);
+    if (!Firebase.RTDB.updateNode(&fbdo, "/home/floor_1/garage", &json)) {
+      Serial.print("Lỗi ghi trạng thái cửa: ");
+      Serial.println(fbdo.errorReason());
     }
   }
 }

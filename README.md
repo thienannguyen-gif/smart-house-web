@@ -33,9 +33,9 @@ Kiểm tra nhanh API: mở http://localhost:3000/api/devices. Thấy "Sai hoặc
 
 ## Nạp firmware
 
-1. Trong Firebase → Authentication → Utilisateurs → **Ajouter un utilisateur**: tạo tài khoản cho mạch.
-2. Trong 6 file dưới đây, thay `DIEN_EMAIL_TAI_KHOAN_MACH` và `DIEN_MAT_KHAU_TAI_KHOAN_MACH` bằng tài khoản vừa tạo; sửa `WIFI_SSID`, `WIFI_PASSWORD` nếu đổi Wi-Fi.
-3. Arduino IDE → Library Manager cài: **Firebase Arduino Client Library for ESP8266 and ESP32** (Mobizt), **LiquidCrystal I2C**, **Keypad**, **Keypad_I2C**, **DHT sensor library**, **Adafruit Unified Sensor**, **Adafruit Fingerprint Sensor Library**, **Adafruit SSD1306**, **Adafruit GFX**. Board: NodeMCU 1.0 (ESP-12E).
+1. Trong Firebase → Authentication → Utilisateurs → **Ajouter un utilisateur**: tạo tài khoản cho mạch. Nếu đây là tài khoản mới (không phải tài khoản đang có), thêm UID của nó vào Rules, xem mục [Bảo mật và hạn mức Firebase](#bảo-mật-và-hạn-mức-firebase).
+2. Trong 6 file dưới đây, thay `DIEN_MAT_KHAU_WIFI`, `DIEN_EMAIL_TAI_KHOAN_MACH` và `DIEN_MAT_KHAU_TAI_KHOAN_MACH` bằng mật khẩu Wi-Fi và tài khoản vừa tạo; sửa `WIFI_SSID` nếu đổi Wi-Fi. **Không commit file đã điền mật khẩu lên GitHub.**
+3. Arduino IDE → Library Manager cài: **Firebase Arduino Client Library for ESP8266 and ESP32** (Mobizt), **LiquidCrystal I2C**, **Keypad**, **DHT sensor library**, **Adafruit Unified Sensor**, **Adafruit Fingerprint Sensor Library**, **Adafruit SSD1306**, **Adafruit GFX**. **Keypad_I2C** không có trong Library Manager: tải [joeyoung/arduino_keypads](https://github.com/joeyoung/arduino_keypads), chép thư mục `Keypad_I2C` vào `Documents/Arduino/libraries`. Board: NodeMCU 1.0 (ESP-12E).
 
 | Firmware | Mạch | Thiết bị |
 |---|---|---|
@@ -47,6 +47,13 @@ Kiểm tra nhanh API: mở http://localhost:3000/api/devices. Thấy "Sai hoặc
 | `van_tay` | ESP8266 | Tầng 3: cửa vân tay, đèn tầng 3 |
 | `thang_may` | Arduino Uno | Thang máy 3 tầng (không nối mạng) |
 | `led_oled` | ESP8266 | Màn hình chào OLED (không nối mạng) |
+
+## Bảo mật và hạn mức Firebase
+
+- **Rules** chỉ cho đúng tài khoản của mạch đọc/ghi nhánh `/home`. Thêm tài khoản khác (vd. cho web ở chế độ Firebase) thì vào Realtime Database → Rules, thêm `|| auth.uid === '<UID>'` vào cả `.read` và `.write`. Web ở chế độ API dùng service account nên không bị Rules chặn.
+- **Tự đăng ký tài khoản đã tắt** (Authentication → Settings → User actions). API key nằm công khai trong code, nên nếu bật lại thì ai cũng tạo được tài khoản.
+- **Hạn mức gói Spark miễn phí: tải xuống 10 GB/tháng**, tính cả header HTTP và mã hóa. Vì vậy firmware nhận lệnh qua **stream** (giữ một kết nối, chỉ nhận dữ liệu khi giá trị đổi) và chỉ ghi khi giá trị đổi, không đọc/ghi Firebase ở mỗi vòng `loop()`. Khi sửa firmware, giữ nguyên cách này. Theo dõi mức dùng ở Realtime Database → Usage.
+- Trang web ở chế độ API hỏi `/api/devices` mỗi 1,5 giây và tự ngừng khi tab bị ẩn.
 
 ## Đưa lên mạng (tùy chọn)
 

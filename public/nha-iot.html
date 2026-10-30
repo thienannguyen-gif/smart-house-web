@@ -740,7 +740,8 @@ const Api = {
   start(){ this.stop(); this.fails = 0; this.iv = setInterval(() => this.poll(), 1500); },
   stop(){ clearInterval(this.iv); this.iv = null; },
   async poll(){
-    if (this.busy) return; this.busy = true;
+    // Tab đang ẩn thì không hỏi API: mỗi lần hỏi là một lần đọc cả nhánh /home trên Firebase.
+    if (this.busy || document.hidden) return; this.busy = true;
     try {
       const j = await this.req('/api/devices');
       if (backend === Api) { if (this.fails > 1) log('Kết nối API trở lại', 'ok'); this.fails = 0; setPill('live', 'API · ' + this.host); onTree(j.home || {}); }

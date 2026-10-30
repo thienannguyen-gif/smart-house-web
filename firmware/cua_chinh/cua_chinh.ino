@@ -1,11 +1,13 @@
+// ESP8266WiFi và Firebase phải đứng trước Keypad: Keypad.h có "#define CLOSED HIGH", trùng tên
+// với hằng CLOSED trong thư viện mạng lwip và làm lỗi biên dịch nếu include sau.
+#include <ESP8266WiFi.h>
+#include <Firebase_ESP_Client.h>
+#include <addons/TokenHelper.h>
 #include <Wire.h>
 #include <Keypad_I2C.h>
 #include <Keypad.h>
 #include <LiquidCrystal_I2C.h>
 #include <Servo.h>
-#include <ESP8266WiFi.h>
-#include <Firebase_ESP_Client.h>
-#include <addons/TokenHelper.h>
 
 // ==== Cấu hình phần cứng ====
 #define KEYPAD_ADDR 0x20
@@ -16,20 +18,25 @@
 
 // ==== Cấu hình WiFi + Firebase (project Smart House: smart-house-fcd4f) ====
 #define WIFI_SSID "Tesla_physics"
-#define WIFI_PASSWORD "top102102"
+#define WIFI_PASSWORD "DIEN_MAT_KHAU_WIFI"
 #define API_KEY "AIzaSyBom2FOJvMisw2NcE89Zkr-rP_dgOSqbMY"
 #define DATABASE_URL "https://smart-house-fcd4f-default-rtdb.asia-southeast1.firebasedatabase.app/"
 #define USER_EMAIL "DIEN_EMAIL_TAI_KHOAN_MACH"
-#define USER_PASSWORD "DIEN_MAT_KHAU_TAI_KHOAN_MACH" 
+#define USER_PASSWORD "DIEN_MAT_KHAU_TAI_KHOAN_MACH"
+
+#define LIGHT_PATH "/home/floor_1/light_room_1"
 
 // ==== LCD & Servo ====
 LiquidCrystal_I2C lcd(LCD_ADDR, 16, 2);
 Servo doorServo;
 
 // ==== Firebase ====
-FirebaseData fbdo;
+FirebaseData fbdo;    // ghi trạng thái
+FirebaseData stream;  // nhận lệnh đèn từ web
 FirebaseAuth auth;
 FirebaseConfig config;
+bool streamStarted = false;
+unsigned long lastStreamTry = 0;
 
 // ==== Keypad cấu hình ====
 const byte ROWS = 4;
@@ -77,6 +84,7 @@ void initFirebase() {
   config.token_status_callback = tokenStatusCallback;
   Firebase.begin(&config, &auth);
   Firebase.reconnectNetwork(true);
+  stream.setBSSLBufferSize(2048, 512);
 }
 
 // ==== Cập nhật trạng thái cửa ====
@@ -85,15 +93,37 @@ void updateFirebaseDoorState(bool state) {
 }
 
 // ==== Lấy lệnh từ Firebase để điều khiển đèn ====
-void checkFirebaseLightCommand() {
-  if (Firebase.RTDB.getBool(&fbdo, "/home/floor_1/light_room_1")) {
-    bool firebaseValue = fbdo.boolData();
-    bool ledControl = !firebaseValue;  // đảo ngược logic
+void applyLightCommand(bool firebaseValue) {
+  bool ledControl = !firebaseValue;  // đảo ngược logic
 
-    if (ledControl != lastLedState) {
-      digitalWrite(LED_PIN, ledControl ? LOW : HIGH); // LOW = bật đèn (relay đóng)
-      lastLedState = ledControl;
+  if (ledControl != lastLedState) {
+    digitalWrite(LED_PIN, ledControl ? LOW : HIGH); // LOW = bật đèn (relay đóng)
+    lastLedState = ledControl;
+  }
+}
+
+// Stream giữ một kết nối mở và chỉ nhận dữ liệu khi lệnh đổi. Bản cũ đọc lệnh ở mỗi vòng
+// loop(), vừa làm bàn phím chậm vừa làm cạn hạn mức tải xuống của gói Firebase miễn phí.
+void checkFirebaseLightCommand() {
+  if (!Firebase.ready()) return;
+
+  if (!streamStarted) {
+    if (lastStreamTry != 0 && millis() - lastStreamTry < 5000) return;
+    lastStreamTry = millis();
+    streamStarted = Firebase.RTDB.beginStream(&stream, LIGHT_PATH);
+    if (!streamStarted) {
+      Serial.print("Loi mo stream: ");
+      Serial.println(stream.errorReason());
     }
+    return;
+  }
+
+  if (!Firebase.RTDB.readStream(&stream)) {
+    Serial.print("Loi doc stream: ");
+    Serial.println(stream.errorReason());
+  }
+  if (stream.streamAvailable() && stream.dataType() == "boolean") {
+    applyLightCommand(stream.boolData());
   }
 }
 
@@ -136,7 +166,7 @@ void loop() {
           lcd.print("Mo cua...");
           doorServo.write(20);  // Mở cửa
           digitalWrite(LED_PIN, HIGH); // Bật đèn
-          Firebase.RTDB.setBool(&fbdo, "/home/floor_1/light_room_1", false);  // Ghi false → bật đèn
+          Firebase.RTDB.setBool(&fbdo, LIGHT_PATH, false);  // Ghi false → bật đèn
           updateFirebaseDoorState(true);
 
           beep(300);
@@ -201,7 +231,7 @@ void loop() {
       lcd.setCursor(0, 1);
       lcd.print("Nhap: ");
       for (int i = 0; i < input.length(); i++) {
-    lcd.print('*');  
+    lcd.print('*');
     }}
   } else if (!key) {
     lastKey = 0;
