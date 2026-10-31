@@ -34,8 +34,12 @@ Kiểm tra nhanh API: mở http://localhost:3000/api/devices. Thấy "Sai hoặc
 ## Nạp firmware
 
 1. Trong Firebase → Authentication → Utilisateurs → **Ajouter un utilisateur**: tạo tài khoản cho mạch. Nếu đây là tài khoản mới (không phải tài khoản đang có), thêm UID của nó vào Rules, xem mục [Bảo mật và hạn mức Firebase](#bảo-mật-và-hạn-mức-firebase).
-2. Trong 6 file dưới đây, thay `DIEN_MAT_KHAU_WIFI`, `DIEN_EMAIL_TAI_KHOAN_MACH` và `DIEN_MAT_KHAU_TAI_KHOAN_MACH` bằng mật khẩu Wi-Fi và tài khoản vừa tạo; sửa `WIFI_SSID` nếu đổi Wi-Fi. **Không commit file đã điền mật khẩu lên GitHub.**
-3. Arduino IDE → Library Manager cài: **Firebase Arduino Client Library for ESP8266 and ESP32** (Mobizt), **LiquidCrystal I2C**, **Keypad**, **DHT sensor library**, **Adafruit Unified Sensor**, **Adafruit Fingerprint Sensor Library**, **Adafruit SSD1306**, **Adafruit GFX**. **Keypad_I2C** không có trong Library Manager: tải [joeyoung/arduino_keypads](https://github.com/joeyoung/arduino_keypads), chép thư mục `Keypad_I2C` vào `Documents/Arduino/libraries`. Board: NodeMCU 1.0 (ESP-12E).
+2. Trong 6 file dưới đây, thay `DIEN_EMAIL_TAI_KHOAN_MACH` và `DIEN_MAT_KHAU_TAI_KHOAN_MACH` bằng tài khoản vừa tạo, và `DIEN_MAT_KHAU_CAI_DAT` bằng mật khẩu Wi-Fi cài đặt do bạn tự đặt (từ 8 ký tự, **giống nhau ở cả 6 file**). Mật khẩu Wi-Fi nhà không nằm trong code, xem bước 5. **Không commit file đã điền mật khẩu lên GitHub.**
+3. Arduino IDE → Library Manager cài: **Firebase Arduino Client Library for ESP8266 and ESP32** (Mobizt), **LiquidCrystal I2C**, **Keypad**, **DHT sensor library**, **Adafruit Unified Sensor**, **Adafruit Fingerprint Sensor Library**, **Adafruit SSD1306**, **Adafruit GFX**. **Keypad_I2C** không có trong Library Manager: tải [joeyoung/arduino_keypads](https://github.com/joeyoung/arduino_keypads), chép thư mục `Keypad_I2C` vào `Documents/Arduino/libraries`.
+4. Chép thư mục `firmware/libraries/WiFiShare` vào `Documents/Arduino/libraries`. Board: NodeMCU 1.0 (ESP-12E), giữ Flash Size mặc định (có 2 MB FS để lưu mạng).
+5. **Vào Wi-Fi nhà lần đầu:** nạp xong cả 6 mạch rồi bật chúng cùng lúc. Chưa có mạng nên khoảng 1 phút sau, một mạch phát Wi-Fi `SmartHouse-CaiDat`. Vào Wi-Fi đó bằng điện thoại (mật khẩu ở bước 2), trang cài đặt tự mở (hoặc mở `http://192.168.4.1`). Chọn Wi-Fi nhà, nhập mật khẩu, bấm **Lưu và chuyển mạng**. Mỗi mạch tự vào Wi-Fi nhà và báo lại trên trang; xong thì Wi-Fi cài đặt tắt. Mạng được lưu trong mạch, nạp lại firmware vẫn còn.
+
+Sau này đổi router hoặc mật khẩu Wi-Fi thì các mạch không vào được mạng, Wi-Fi cài đặt tự hiện lại: làm như bước 5. Mạch nào đang tắt lúc đó, bật lên sau sẽ tự phát Wi-Fi cài đặt riêng; nhập mạng thêm một lần cho nó. Chi tiết: `firmware/libraries/WiFiShare/README.md`.
 
 | Firmware | Mạch | Thiết bị |
 |---|---|---|

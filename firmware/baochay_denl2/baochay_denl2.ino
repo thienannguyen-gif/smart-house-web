@@ -1,11 +1,14 @@
 #include <Arduino.h>
 #include <ESP8266WiFi.h>
+#include <WiFiShare.h>
 #include <Firebase_ESP_Client.h>
 #include <addons/TokenHelper.h>
 
-// WiFi credentials
-#define WIFI_SSID       "Tesla_physics"
-#define WIFI_PASSWORD   "DIEN_MAT_KHAU_WIFI"
+// Wi-Fi nhà do WiFiShare lo (firmware/libraries/WiFiShare). Mọi mạch dùng cùng SETUP_SSID và
+// SETUP_PASSWORD. Không commit mật khẩu thật lên GitHub.
+#define DEVICE_NAME     "bao_chay_tang_2"
+#define SETUP_SSID      "SmartHouse-CaiDat"
+#define SETUP_PASSWORD  "DIEN_MAT_KHAU_CAI_DAT"
 
 // Firebase config
 #define API_KEY "AIzaSyBom2FOJvMisw2NcE89Zkr-rP_dgOSqbMY"
@@ -19,11 +22,14 @@
 #define SWITCH_PIN D5
 #define LIGHT_RELAY_PIN D6
 
-// Firebase objects
+// Wi-Fi, Firebase
+WiFiShare wifiShare;
 FirebaseData fbdo;    // ghi trạng thái, cảm biến
 FirebaseData stream;  // nhận lệnh đèn và tắt còi từ web (cả nhánh /home/floor_2)
 FirebaseAuth auth;
 FirebaseConfig config;
+bool firebaseStarted = false;
+bool firebaseAnnounced = false;  // đã tạo các nhánh tầng 2 và ghi thông báo sau khi khởi động
 bool streamStarted = false;
 unsigned long lastStreamTry = 0;
 
@@ -48,16 +54,6 @@ bool lastButtonState = HIGH;
 unsigned long lastDebounceTime = 0;
 const unsigned long debounceDelay = 50;
 
-void connectToWiFi() {
-  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-  Serial.print("🔌 Đang kết nối WiFi");
-  while (WiFi.status() != WL_CONNECTED) {
-    Serial.print(".");
-    delay(500);
-  }
-  Serial.println("\n✅ Đã kết nối WiFi");
-}
-
 void initFirebase() {
   config.api_key = API_KEY;
   config.database_url = DATABASE_URL;
@@ -65,17 +61,24 @@ void initFirebase() {
   auth.user.password = USER_PASSWORD;
   config.token_status_callback = tokenStatusCallback;
 
+  // false: thư viện Firebase không tự nối lại Wi-Fi, việc đó làm hỏng Wi-Fi cài đặt của WiFiShare.
+  // Phải gọi trước Firebase.begin().
+  Firebase.reconnectNetwork(false);
   Firebase.begin(&config, &auth);
-  Firebase.reconnectNetwork(true);
   stream.setBSSLBufferSize(2048, 512);
-
+  firebaseStarted = true;
   Serial.println("🔄 Đang kết nối Firebase...");
-  unsigned long timeout = millis();
-  while (!Firebase.ready() && millis() - timeout < 15000) {
-    delay(100);
-  }
+}
 
-  if (Firebase.ready()) {
+// Chỉ dùng Firebase khi đã vào mạng nhà. Lần đầu vào được mạng thì khởi động Firebase, sẵn sàng
+// lần đầu thì tạo các nhánh tầng 2.
+bool firebaseReady() {
+  if (!wifiShare.online()) return false;
+  if (!firebaseStarted) initFirebase();
+  if (!Firebase.ready()) return false;
+
+  if (!firebaseAnnounced) {
+    firebaseAnnounced = true;
     Serial.println("✅ Firebase kết nối thành công!");
 
     // Khởi tạo các nhánh tầng 2 nếu chưa có
@@ -99,10 +102,8 @@ void initFirebase() {
       Serial.print("❌ Lỗi cập nhật thông báo: ");
       Serial.println(fbdo.errorReason());
     }
-
-  } else {
-    Serial.println("❌ Kết nối Firebase thất bại!");
   }
+  return true;
 }
 
 void applyLight(bool lightState, const char *source) {
@@ -119,7 +120,10 @@ void applyLight(bool lightState, const char *source) {
 // Stream giữ một kết nối mở và chỉ nhận dữ liệu khi có thay đổi. Bản cũ đọc 2 giá trị và ghi
 // 2 giá trị mỗi 0,5 giây, làm cạn hạn mức tải xuống của gói Firebase miễn phí.
 void readFloor2Stream() {
-  if (!Firebase.ready()) return;
+  if (!firebaseReady()) {
+    if (!wifiShare.online()) streamStarted = false;  // vào lại mạng thì mở stream lại
+    return;
+  }
 
   if (!streamStarted) {
     if (lastStreamTry != 0 && millis() - lastStreamTry < 5000) return;
@@ -157,7 +161,7 @@ void uploadSmoke(int smokeValue) {
   bool levelChanged = abs(smokeValue - sentSmokeLevel) >= 10;
   // Báo khói đổi: gửi ngay, nếu lỗi thì thử lại sau 1 giây. Giá trị khói: cách nhau ít nhất 5 giây.
   bool due = detectedChanged ? since >= 1000 : (levelChanged && since >= smokeUploadInterval);
-  if (!due || !Firebase.ready()) return;
+  if (!due || !firebaseReady()) return;
 
   lastSmokeUpload = millis();
   FirebaseJson json;
@@ -181,13 +185,13 @@ void setup() {
   digitalWrite(LIGHT_RELAY_PIN, LOW);
   digitalWrite(BUZZER_PIN, LOW);
 
-  connectToWiFi();
-  initFirebase();
+  wifiShare.begin(DEVICE_NAME, SETUP_SSID, SETUP_PASSWORD);
 }
 
-// Nút nhấn, cảm biến khói và còi chạy cả khi mất mạng. Thư viện Firebase tự nối lại WiFi
-// (reconnectNetwork) và stream tự mở lại khi có mạng.
+// Nút nhấn, cảm biến khói và còi chạy cả khi mất mạng. WiFiShare tự vào lại mạng, stream tự mở
+// lại khi có mạng.
 void loop() {
+  wifiShare.loop();
   readFloor2Stream();
 
   // ====== ĐIỀU KHIỂN ĐÈN BẰNG NÚT NHẤN ======
@@ -203,7 +207,7 @@ void loop() {
         applyLight(!lastLightState, "nút nhấn");
 
         // Cập nhật trạng thái đèn về Firebase
-        Firebase.RTDB.setBool(&fbdo, "/home/floor_2/light_room_2", lastLightState);
+        if (firebaseReady()) Firebase.RTDB.setBool(&fbdo, "/home/floor_2/light_room_2", lastLightState);
       }
     }
   }

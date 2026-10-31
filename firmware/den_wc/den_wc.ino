@@ -1,18 +1,24 @@
 #include <ESP8266WiFi.h>
+#include <WiFiShare.h>
 #include <Firebase_ESP_Client.h>
 #include <addons/TokenHelper.h>
 
 // ==== CẤU HÌNH WI-FI & FIREBASE ====
-#define WIFI_SSID "Tesla_physics"
-#define WIFI_PASSWORD "DIEN_MAT_KHAU_WIFI"
+// Wi-Fi nhà do WiFiShare lo (firmware/libraries/WiFiShare). Mọi mạch dùng cùng SETUP_SSID và
+// SETUP_PASSWORD. Không commit mật khẩu thật lên GitHub.
+#define DEVICE_NAME "den_wc"
+#define SETUP_SSID "SmartHouse-CaiDat"
+#define SETUP_PASSWORD "DIEN_MAT_KHAU_CAI_DAT"
 #define API_KEY "AIzaSyBom2FOJvMisw2NcE89Zkr-rP_dgOSqbMY"
 #define DATABASE_URL "https://smart-house-fcd4f-default-rtdb.asia-southeast1.firebasedatabase.app/"
 #define USER_EMAIL "DIEN_EMAIL_TAI_KHOAN_MACH"
 #define USER_PASSWORD "DIEN_MAT_KHAU_TAI_KHOAN_MACH"
 
+WiFiShare wifiShare;
 FirebaseData fbdo;
 FirebaseAuth auth;
 FirebaseConfig config;
+bool firebaseStarted = false;
 
 // ==== KHAI BÁO CHÂN KẾT NỐI ====
 const int pirPin = D4;     // PIR 1 (WC1)
@@ -33,27 +39,29 @@ unsigned long lastMotionTime2 = 0;
 bool led2On = false;
 int lastPirState2 = LOW;
 
-void connectToWiFi() {
-  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-  Serial.print("Đang kết nối Wi-Fi");
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(500);
-    Serial.print(".");
-  }
-  Serial.println("\nĐã kết nối Wi-Fi");
-}
-
 void initFirebase() {
   config.api_key = API_KEY;
   config.database_url = DATABASE_URL;
   auth.user.email = USER_EMAIL;
   auth.user.password = USER_PASSWORD;
   config.token_status_callback = tokenStatusCallback;
+  // false: thư viện Firebase không tự nối lại Wi-Fi, việc đó làm hỏng Wi-Fi cài đặt của WiFiShare.
+  // Phải gọi trước Firebase.begin().
+  Firebase.reconnectNetwork(false);
   Firebase.begin(&config, &auth);
-  Firebase.reconnectNetwork(true);
+  firebaseStarted = true;
 }
 
+// Chỉ dùng Firebase khi đã vào mạng nhà. Lần đầu vào được mạng thì khởi động Firebase.
+bool firebaseReady() {
+  if (!wifiShare.online()) return false;
+  if (!firebaseStarted) initFirebase();
+  return Firebase.ready();
+}
+
+// Mất mạng thì đèn vẫn bật/tắt theo PIR, chỉ không ghi lên Firebase
 void updateFirebaseLightState(const String &path, bool state) {
+  if (!firebaseReady()) return;
   Firebase.RTDB.setBool(&fbdo, path, state);
 }
 
@@ -68,11 +76,11 @@ void setup() {
   pinMode(ledPin2, OUTPUT);
   digitalWrite(ledPin2, LOW);
 
-  connectToWiFi();
-  initFirebase();
+  wifiShare.begin(DEVICE_NAME, SETUP_SSID, SETUP_PASSWORD);
 }
 
 void loop() {
+  wifiShare.loop();
   unsigned long currentMillis = millis();
 
   // ==== PIR 1 ====

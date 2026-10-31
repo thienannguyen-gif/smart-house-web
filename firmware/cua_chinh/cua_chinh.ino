@@ -1,6 +1,7 @@
-// ESP8266WiFi và Firebase phải đứng trước Keypad: Keypad.h có "#define CLOSED HIGH", trùng tên
-// với hằng CLOSED trong thư viện mạng lwip và làm lỗi biên dịch nếu include sau.
+// ESP8266WiFi, WiFiShare và Firebase phải đứng trước Keypad: Keypad.h có "#define CLOSED HIGH", trùng
+// tên với hằng CLOSED trong thư viện mạng lwip và làm lỗi biên dịch nếu include sau.
 #include <ESP8266WiFi.h>
+#include <WiFiShare.h>
 #include <Firebase_ESP_Client.h>
 #include <addons/TokenHelper.h>
 #include <Wire.h>
@@ -17,8 +18,11 @@
 #define LED_PIN D7  // Relay nối chân D7
 
 // ==== Cấu hình WiFi + Firebase (project Smart House: smart-house-fcd4f) ====
-#define WIFI_SSID "Tesla_physics"
-#define WIFI_PASSWORD "DIEN_MAT_KHAU_WIFI"
+// Wi-Fi nhà do WiFiShare lo (firmware/libraries/WiFiShare). Mọi mạch dùng cùng SETUP_SSID và
+// SETUP_PASSWORD. Không commit mật khẩu thật lên GitHub.
+#define DEVICE_NAME "cua_chinh"
+#define SETUP_SSID "SmartHouse-CaiDat"
+#define SETUP_PASSWORD "DIEN_MAT_KHAU_CAI_DAT"
 #define API_KEY "AIzaSyBom2FOJvMisw2NcE89Zkr-rP_dgOSqbMY"
 #define DATABASE_URL "https://smart-house-fcd4f-default-rtdb.asia-southeast1.firebasedatabase.app/"
 #define USER_EMAIL "DIEN_EMAIL_TAI_KHOAN_MACH"
@@ -30,11 +34,13 @@
 LiquidCrystal_I2C lcd(LCD_ADDR, 16, 2);
 Servo doorServo;
 
-// ==== Firebase ====
+// ==== Wi-Fi, Firebase ====
+WiFiShare wifiShare;
 FirebaseData fbdo;    // ghi trạng thái
 FirebaseData stream;  // nhận lệnh đèn từ web
 FirebaseAuth auth;
 FirebaseConfig config;
+bool firebaseStarted = false;
 bool streamStarted = false;
 unsigned long lastStreamTry = 0;
 
@@ -67,14 +73,6 @@ void beep(int time_ms = 100) {
   noTone(BUZZER_PIN);
 }
 
-// ==== WiFi ====
-void connectToWiFi() {
-  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(500);
-  }
-}
-
 // ==== Firebase ====
 void initFirebase() {
   config.api_key = API_KEY;
@@ -82,13 +80,25 @@ void initFirebase() {
   auth.user.email = USER_EMAIL;
   auth.user.password = USER_PASSWORD;
   config.token_status_callback = tokenStatusCallback;
+  // false: thư viện Firebase không tự nối lại Wi-Fi, việc đó làm hỏng Wi-Fi cài đặt của WiFiShare.
+  // Phải gọi trước Firebase.begin().
+  Firebase.reconnectNetwork(false);
   Firebase.begin(&config, &auth);
-  Firebase.reconnectNetwork(true);
   stream.setBSSLBufferSize(2048, 512);
+  firebaseStarted = true;
+}
+
+// Chỉ dùng Firebase khi đã vào mạng nhà. Lần đầu vào được mạng thì khởi động Firebase.
+// Mất mạng thì bàn phím và cửa vẫn chạy, chỉ không ghi lên Firebase.
+bool firebaseReady() {
+  if (!wifiShare.online()) return false;
+  if (!firebaseStarted) initFirebase();
+  return Firebase.ready();
 }
 
 // ==== Cập nhật trạng thái cửa ====
 void updateFirebaseDoorState(bool state) {
+  if (!firebaseReady()) return;
   Firebase.RTDB.setBool(&fbdo, "/home/floor_1/door_opened_1", state);
 }
 
@@ -105,7 +115,10 @@ void applyLightCommand(bool firebaseValue) {
 // Stream giữ một kết nối mở và chỉ nhận dữ liệu khi lệnh đổi. Bản cũ đọc lệnh ở mỗi vòng
 // loop(), vừa làm bàn phím chậm vừa làm cạn hạn mức tải xuống của gói Firebase miễn phí.
 void checkFirebaseLightCommand() {
-  if (!Firebase.ready()) return;
+  if (!firebaseReady()) {
+    if (!wifiShare.online()) streamStarted = false;  // vào lại mạng thì mở stream lại
+    return;
+  }
 
   if (!streamStarted) {
     if (lastStreamTry != 0 && millis() - lastStreamTry < 5000) return;
@@ -145,12 +158,12 @@ void setup() {
   pinMode(LED_PIN, OUTPUT);
   digitalWrite(LED_PIN, LOW); // HIGH = đèn tắt (relay mở)
 
-  connectToWiFi();
-  initFirebase();
+  wifiShare.begin(DEVICE_NAME, SETUP_SSID, SETUP_PASSWORD);
 }
 
 // ==== Loop ====
 void loop() {
+  wifiShare.loop();
   checkFirebaseLightCommand();
 
   char key = kpad.getKey();
@@ -166,7 +179,7 @@ void loop() {
           lcd.print("Mo cua...");
           doorServo.write(20);  // Mở cửa
           digitalWrite(LED_PIN, HIGH); // Bật đèn
-          Firebase.RTDB.setBool(&fbdo, LIGHT_PATH, false);  // Ghi false → bật đèn
+          if (firebaseReady()) Firebase.RTDB.setBool(&fbdo, LIGHT_PATH, false);  // Ghi false → bật đèn
           updateFirebaseDoorState(true);
 
           beep(300);

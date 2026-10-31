@@ -4,6 +4,7 @@
 #include <DHT.h>
 #include <DHT_U.h>
 #include <ESP8266WiFi.h>
+#include <WiFiShare.h>
 #include <Firebase_ESP_Client.h>
 #include <addons/TokenHelper.h>
 
@@ -34,32 +35,28 @@ float sentTemp = -1000;
 float sentHumi = -1000;
 
 // ==== WiFi & Firebase ====
-#define WIFI_SSID "Tesla_physics"
-#define WIFI_PASSWORD "DIEN_MAT_KHAU_WIFI"
+// Wi-Fi nhà do WiFiShare lo (firmware/libraries/WiFiShare). Mọi mạch dùng cùng SETUP_SSID và
+// SETUP_PASSWORD. Không commit mật khẩu thật lên GitHub.
+#define DEVICE_NAME "bao_trom_do_am"
+#define SETUP_SSID "SmartHouse-CaiDat"
+#define SETUP_PASSWORD "DIEN_MAT_KHAU_CAI_DAT"
 #define API_KEY "AIzaSyBom2FOJvMisw2NcE89Zkr-rP_dgOSqbMY"
 #define DATABASE_URL "https://smart-house-fcd4f-default-rtdb.asia-southeast1.firebasedatabase.app/"
 #define USER_EMAIL "DIEN_EMAIL_TAI_KHOAN_MACH"
 #define USER_PASSWORD "DIEN_MAT_KHAU_TAI_KHOAN_MACH"
 
+WiFiShare wifiShare;
 FirebaseData fbdo;    // ghi trạng thái, cảm biến
 FirebaseData stream;  // nhận lệnh bật/tắt báo trộm từ web
 FirebaseAuth auth;
 FirebaseConfig config;
+bool firebaseStarted = false;
+bool firebaseAnnounced = false;  // đã ghi các giá trị đầu và thông báo sau khi khởi động
 bool streamStarted = false;
 unsigned long lastStreamTry = 0;
 
 bool alarmEnabled = true;
 bool alarmTriggered = false;  // giá trị alarm_triggered_1 đã ghi lên Firebase
-
-void connectToWiFi() {
-  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-  Serial.print("🔌 Đang kết nối WiFi");
-  while (WiFi.status() != WL_CONNECTED) {
-    Serial.print(".");
-    delay(500);
-  }
-  Serial.println("\n✅ Đã kết nối WiFi");
-}
 
 void initFirebase() {
   config.api_key = API_KEY;
@@ -68,27 +65,41 @@ void initFirebase() {
   auth.user.password = USER_PASSWORD;
   config.token_status_callback = tokenStatusCallback;
 
+  // false: thư viện Firebase không tự nối lại Wi-Fi, việc đó làm hỏng Wi-Fi cài đặt của WiFiShare.
+  // Phải gọi trước Firebase.begin().
+  Firebase.reconnectNetwork(false);
   Firebase.begin(&config, &auth);
-  Firebase.reconnectNetwork(true);
   stream.setBSSLBufferSize(2048, 512);
-
+  firebaseStarted = true;
   Serial.println("🔄 Kết nối Firebase...");
-  while (!Firebase.ready()) delay(100);
+}
 
-  if (Firebase.ready()) {
+// Chỉ dùng Firebase khi đã vào mạng nhà. Lần đầu vào được mạng thì khởi động Firebase, sẵn sàng
+// lần đầu thì ghi các giá trị đầu. Mất mạng thì còi, cảm biến và LCD vẫn chạy.
+bool firebaseReady() {
+  if (!wifiShare.online()) return false;
+  if (!firebaseStarted) initFirebase();
+  if (!Firebase.ready()) return false;
+
+  if (!firebaseAnnounced) {
+    firebaseAnnounced = true;
     Serial.println("✅ Firebase đã sẵn sàng!");
-    Firebase.RTDB.setBool(&fbdo, "/home/floor_1/alarm_triggered_1", false);
+    Firebase.RTDB.setBool(&fbdo, "/home/floor_1/alarm_triggered_1", alarmTriggered);
     Firebase.RTDB.setFloat(&fbdo, "/home/floor_1/temperature_1", 0);
     Firebase.RTDB.setFloat(&fbdo, "/home/floor_1/humidity_1", 0);
     Firebase.RTDB.setString(&fbdo, "/home/thongbao", "ESP8266 PIR DHT đã kết nối");
   }
+  return true;
 }
 
 // === Đọc trạng thái bật/tắt còi từ Firebase ===
 // Stream giữ một kết nối mở và chỉ nhận dữ liệu khi giá trị đổi. Bản cũ đọc alarm_enabled_1
 // và ghi alarm_triggered_1 ở mỗi vòng loop(), làm cạn hạn mức của gói Firebase miễn phí.
 void readAlarmStream() {
-  if (!Firebase.ready()) return;
+  if (!firebaseReady()) {
+    if (!wifiShare.online()) streamStarted = false;  // vào lại mạng thì mở stream lại
+    return;
+  }
 
   if (!streamStarted) {
     if (lastStreamTry != 0 && millis() - lastStreamTry < 5000) return;
@@ -112,8 +123,9 @@ void readAlarmStream() {
 }
 
 // Chỉ ghi khi giá trị đổi. Ghi lỗi thì không thử lại ngay, để không gửi request ở mỗi vòng loop().
+// Lúc mất mạng thì chưa ghi, có mạng lại mới ghi.
 void setAlarmTriggered(bool triggered) {
-  if (triggered == alarmTriggered) return;
+  if (triggered == alarmTriggered || !firebaseReady()) return;
   alarmTriggered = triggered;
   if (!Firebase.RTDB.setBool(&fbdo, "/home/floor_1/alarm_triggered_1", triggered)) {
     Serial.print("❌ Lỗi ghi alarm_triggered_1: ");
@@ -136,11 +148,11 @@ void setup() {
   delay(2000);
   lcd.clear();
 
-  connectToWiFi();
-  initFirebase();
+  wifiShare.begin(DEVICE_NAME, SETUP_SSID, SETUP_PASSWORD);
 }
 
 void loop() {
+  wifiShare.loop();
   unsigned long currentMillis = millis();
 
   readAlarmStream();
@@ -189,7 +201,7 @@ lastPirState = pirDetected;
       }
 
       bool changed = abs(t - sentTemp) >= 0.5 || abs(h - sentHumi) >= 1;
-      if (changed && (lastUpload == 0 || currentMillis - lastUpload >= uploadInterval)) {
+      if (changed && (lastUpload == 0 || currentMillis - lastUpload >= uploadInterval) && firebaseReady()) {
         lastUpload = currentMillis;
         FirebaseJson json;
         json.set("temperature_1", t);

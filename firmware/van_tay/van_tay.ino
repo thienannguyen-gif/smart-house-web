@@ -1,5 +1,6 @@
 #include <Arduino.h>
 #include <ESP8266WiFi.h>
+#include <WiFiShare.h>
 #include <Firebase_ESP_Client.h>
 #include <addons/TokenHelper.h>
 
@@ -8,8 +9,11 @@
 #include <Servo.h>
 
 // --- WiFi & Firebase config ---
-#define WIFI_SSID       "Tesla_physics"
-#define WIFI_PASSWORD   "DIEN_MAT_KHAU_WIFI"
+// Wi-Fi nhà do WiFiShare lo (firmware/libraries/WiFiShare). Mọi mạch dùng cùng SETUP_SSID và
+// SETUP_PASSWORD. Không commit mật khẩu thật lên GitHub.
+#define DEVICE_NAME     "van_tay"
+#define SETUP_SSID      "SmartHouse-CaiDat"
+#define SETUP_PASSWORD  "DIEN_MAT_KHAU_CAI_DAT"
 
 #define API_KEY         "AIzaSyBom2FOJvMisw2NcE89Zkr-rP_dgOSqbMY"
 #define DATABASE_URL    "https://smart-house-fcd4f-default-rtdb.asia-southeast1.firebasedatabase.app/"
@@ -30,37 +34,19 @@ Servo doorServo;
 const int openPos = 180;
 const int closePos = 0;
 
-// --- Firebase objects ---
+// --- Wi-Fi, Firebase ---
+WiFiShare wifiShare;
 FirebaseData fbdo;    // ghi trạng thái
 FirebaseData stream;  // nhận lệnh đèn từ web
 FirebaseAuth auth;
 FirebaseConfig config;
 bool firebaseStarted = false;
+bool firebaseAnnounced = false;  // đã tạo các node và ghi thông báo sau khi khởi động
 bool streamStarted = false;
 unsigned long lastStreamTry = 0;
 
 // --- Biến trạng thái vân tay ---
 int lastFingerprintID = -1;
-
-// --- Hàm khởi động WiFi ---
-bool initWiFi() {
-  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-  Serial.print("Đang kết nối WiFi");
-  unsigned long start = millis();
-  while (WiFi.status() != WL_CONNECTED && millis() - start < 20000) {
-    Serial.print(".");
-    delay(300);
-  }
-  if (WiFi.status() == WL_CONNECTED) {
-    Serial.println("\n✅ Đã kết nối WiFi");
-    Serial.print("IP: ");
-    Serial.println(WiFi.localIP());
-    return true;
-  } else {
-    Serial.println("\n❌ Kết nối WiFi thất bại!");
-    return false;
-  }
-}
 
 // --- Hàm khởi động Firebase ---
 void initFirebase() {
@@ -70,18 +56,24 @@ void initFirebase() {
   auth.user.password = USER_PASSWORD;
   config.token_status_callback = tokenStatusCallback;
 
+  // false: thư viện Firebase không tự nối lại Wi-Fi, việc đó làm hỏng Wi-Fi cài đặt của WiFiShare.
+  // Phải gọi trước Firebase.begin().
+  Firebase.reconnectNetwork(false);
   Firebase.begin(&config, &auth);
-  Firebase.reconnectNetwork(true);
   stream.setBSSLBufferSize(2048, 512);
   firebaseStarted = true;
-
   Serial.println("🔄 Đang kết nối Firebase...");
-  unsigned long timeout = millis();
-  while (!Firebase.ready() && millis() - timeout < 15000) {
-    delay(100);
-  }
+}
 
-  if (Firebase.ready()) {
+// Chỉ dùng Firebase khi đã vào mạng nhà. Lần đầu vào được mạng thì khởi động Firebase, sẵn sàng
+// lần đầu thì tạo các node. Mất mạng thì cửa vân tay vẫn dùng được.
+bool firebaseReady() {
+  if (!wifiShare.online()) return false;
+  if (!firebaseStarted) initFirebase();
+  if (!Firebase.ready()) return false;
+
+  if (!firebaseAnnounced) {
+    firebaseAnnounced = true;
     Serial.println("✅ Firebase kết nối thành công!");
 
     // Khởi tạo node đèn nếu chưa tồn tại
@@ -107,16 +99,18 @@ void initFirebase() {
     }
 
     Firebase.RTDB.setString(&fbdo, "home/thongbao", "ESP8266 tầng 3 đã kết nối");
-  } else {
-    Serial.println("❌ Firebase connection failed!");
   }
+  return true;
 }
 
 // --- Nhận lệnh đèn từ Firebase ---
 // Stream giữ một kết nối mở và chỉ nhận dữ liệu khi giá trị đổi. Bản cũ đọc đèn mỗi 0,2 giây,
 // làm cạn hạn mức tải xuống của gói Firebase miễn phí.
 void readLightStream() {
-  if (!Firebase.ready()) return;
+  if (!firebaseReady()) {
+    if (!wifiShare.online()) streamStarted = false;  // vào lại mạng thì mở stream lại
+    return;
+  }
 
   if (!streamStarted) {
     if (lastStreamTry != 0 && millis() - lastStreamTry < 5000) return;
@@ -157,6 +151,7 @@ int getFingerprintID() {
 
 // --- Hàm cập nhật trạng thái đèn trên Firebase ---
 void updateLightStatus(bool on) {
+  if (!firebaseReady()) return;
   if (Firebase.RTDB.setBool(&fbdo, "home/light_room_3", on)) {
     Serial.print("✅ Cập nhật trạng thái đèn: ");
     Serial.println(on ? "BẬT" : "TẮT");
@@ -168,6 +163,7 @@ void updateLightStatus(bool on) {
 
 // --- Hàm cập nhật trạng thái cửa trên Firebase ---
 void updateDoorStatus(bool open) {
+  if (!firebaseReady()) return;
   if (Firebase.RTDB.setBool(&fbdo, "home/door_status", open)) {
     Serial.print("✅ Cập nhật trạng thái cửa: ");
     Serial.println(open ? "MỞ" : "ĐÓNG");
@@ -218,21 +214,21 @@ void setup() {
   Serial.print("Số vân tay đã lưu: ");
   Serial.println(finger.templateCount);
 
-  if (initWiFi()) {
-    initFirebase();
-  }
+  wifiShare.begin(DEVICE_NAME, SETUP_SSID, SETUP_PASSWORD);
 }
 
 void loop() {
-  // Lấy trạng thái đèn từ Firebase để điều khiển relay. Mất mạng thì thư viện Firebase tự nối
-  // lại WiFi (reconnectNetwork), trong lúc đó cửa vân tay vẫn dùng được.
-  if (firebaseStarted) {
-    readLightStream();
-  } else if (WiFi.status() == WL_CONNECTED) {
-    initFirebase();  // lúc khởi động chưa có WiFi
-  }
+  wifiShare.loop();
 
-  // Quét vân tay
+  // Lấy trạng thái đèn từ Firebase để điều khiển relay. Mất mạng thì WiFiShare tự vào lại mạng,
+  // trong lúc đó cửa vân tay vẫn dùng được.
+  readLightStream();
+
+  // Quét vân tay 0,2 giây một lần. Không dùng delay(200) ở cuối loop() như trước, để WiFiShare
+  // (trang cài đặt, trao đổi giữa các mạch) không bị chậm.
+  static unsigned long lastFingerScan = 0;
+  if (millis() - lastFingerScan < 200) return;
+  lastFingerScan = millis();
   int id = getFingerprintID();
 
   if (id >= 0 && id != lastFingerprintID) {
@@ -254,6 +250,4 @@ void loop() {
   } else if (id == -1) {
     lastFingerprintID = -1;
   }
-
-  delay(200);
 }

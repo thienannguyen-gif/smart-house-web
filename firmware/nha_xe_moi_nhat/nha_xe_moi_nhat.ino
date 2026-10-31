@@ -1,10 +1,14 @@
 #include <ESP8266WiFi.h>
+#include <WiFiShare.h>
 #include <Firebase_ESP_Client.h>
 #include <addons/TokenHelper.h>
 
 // ==== Thông tin Wi-Fi & Firebase ====
-#define WIFI_SSID "Tesla_physics"
-#define WIFI_PASSWORD "DIEN_MAT_KHAU_WIFI"
+// Wi-Fi nhà do WiFiShare lo (firmware/libraries/WiFiShare). Mọi mạch dùng cùng SETUP_SSID và
+// SETUP_PASSWORD. Không commit mật khẩu thật lên GitHub.
+#define DEVICE_NAME "nha_xe"
+#define SETUP_SSID "SmartHouse-CaiDat"
+#define SETUP_PASSWORD "DIEN_MAT_KHAU_CAI_DAT"
 
 #define API_KEY "AIzaSyBom2FOJvMisw2NcE89Zkr-rP_dgOSqbMY"
 #define DATABASE_URL "https://smart-house-fcd4f-default-rtdb.asia-southeast1.firebasedatabase.app/"
@@ -13,10 +17,12 @@
 
 #define COMMAND_PATH "/home/floor_1/garage/command"
 
+WiFiShare wifiShare;
 FirebaseData fbdo;    // ghi trạng thái cửa
 FirebaseData stream;  // nhận lệnh từ web
 FirebaseAuth auth;
 FirebaseConfig config;
+bool firebaseStarted = false;
 
 // ==== GPIO cửa cuốn ====
 #define IN1 D1
@@ -37,6 +43,12 @@ bool fromButton = false;     // lần chạy hiện tại do nút nhấn tại c
 bool streamStarted = false;
 unsigned long lastStreamTry = 0;
 
+// Trạng thái cửa chưa ghi được lên Firebase (vd. bấm nút lúc mất mạng)
+bool statusDirty = false;
+bool statusHasCommand = false;  // ghi cả lệnh, vì lần chạy đó do nút nhấn
+unsigned long lastStatusTry = 0;
+int statusFails = 0;            // số lần ghi lỗi lúc đã có mạng
+
 void setup() {
   Serial.begin(9600);
 
@@ -48,31 +60,45 @@ void setup() {
 
   stopMotor();
 
-  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-  Serial.print("Đang kết nối WiFi");
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(500);
-    Serial.print(".");
-  }
-  Serial.println("\nĐã kết nối WiFi");
+  wifiShare.begin(DEVICE_NAME, SETUP_SSID, SETUP_PASSWORD);
+}
 
+void initFirebase() {
   config.api_key = API_KEY;
   config.database_url = DATABASE_URL;
   auth.user.email = USER_EMAIL;
   auth.user.password = USER_PASSWORD;
   config.token_status_callback = tokenStatusCallback;
+  // false: thư viện Firebase không tự nối lại Wi-Fi, việc đó làm hỏng Wi-Fi cài đặt của WiFiShare.
+  // Phải gọi trước Firebase.begin().
+  Firebase.reconnectNetwork(false);
   Firebase.begin(&config, &auth);
-  Firebase.reconnectNetwork(true);
   stream.setBSSLBufferSize(2048, 512);
+  firebaseStarted = true;
+}
+
+// Chỉ dùng Firebase khi đã vào mạng nhà. Lần đầu vào được mạng thì khởi động Firebase.
+// Mất mạng thì nút nhấn tại chỗ vẫn chạy cửa.
+bool firebaseReady() {
+  if (!wifiShare.online()) return false;
+  if (!firebaseStarted) initFirebase();
+  return Firebase.ready();
 }
 
 // ==== Nhận lệnh từ Firebase ====
 // Stream giữ một kết nối mở và chỉ nhận dữ liệu khi lệnh đổi. Bản cũ đọc lệnh ở mỗi vòng
 // loop(), hàng chục request mỗi giây, làm cạn hạn mức tải xuống của gói Firebase miễn phí.
 void readCommandStream() {
-  if (!Firebase.ready()) return;
+  if (!firebaseReady()) {
+    if (!wifiShare.online()) streamStarted = false;  // vào lại mạng thì mở stream lại
+    return;
+  }
 
   if (!streamStarted) {
+    // Mở stream thì Firebase gửi lệnh đang lưu trên web. Ghi trạng thái cửa trước, để lệnh cũ
+    // trên web không chạy lại cửa vừa bấm nút lúc mất mạng. Ghi lỗi 3 lần thì vẫn mở stream, để
+    // web còn điều khiển được.
+    if (statusDirty && statusFails < 3) return;
     if (lastStreamTry != 0 && millis() - lastStreamTry < 5000) return;
     lastStreamTry = millis();
     streamStarted = Firebase.RTDB.beginStream(&stream, COMMAND_PATH);
@@ -92,6 +118,28 @@ void readCommandStream() {
   }
 }
 
+// Cập nhật trạng thái cửa lên Firebase trong một request. Lần chạy do nút nhấn tại chỗ thì ghi cả
+// lệnh, để web hiện đúng và lệnh kế tiếp từ web vẫn là một thay đổi. Ghi không được thì thử lại
+// 5 giây một lần.
+void syncDoorStatus() {
+  if (!statusDirty || !firebaseReady()) return;
+  if (lastStatusTry != 0 && millis() - lastStatusTry < 5000) return;
+  lastStatusTry = millis();
+
+  FirebaseJson json;
+  json.set("status", lastCommand == "open" ? "open" : "closed");
+  if (statusHasCommand) json.set("command", lastCommand);
+  if (Firebase.RTDB.updateNode(&fbdo, "/home/floor_1/garage", &json)) {
+    statusDirty = false;
+    statusHasCommand = false;
+    statusFails = 0;
+  } else {
+    statusFails++;
+    Serial.print("Lỗi ghi trạng thái cửa: ");
+    Serial.println(fbdo.errorReason());
+  }
+}
+
 void startRun(int direction, const String &cmd, bool button) {
   if (direction == 1) rollUp();
   else rollDown();
@@ -103,6 +151,7 @@ void startRun(int direction, const String &cmd, bool button) {
 }
 
 void loop() {
+  wifiShare.loop();
   readCommandStream();
 
   // ==== Lệnh từ web ====
@@ -130,16 +179,13 @@ void loop() {
     isRunning = false;
     currentDirection = 0;
 
-    // Cập nhật trạng thái cửa lên Firebase sau khi motor đã dừng, trong một request.
-    // Bấm nút tại chỗ thì ghi cả lệnh, để web hiện đúng và lệnh kế tiếp từ web vẫn là một thay đổi.
-    FirebaseJson json;
-    json.set("status", lastCommand == "open" ? "open" : "closed");
-    if (fromButton) json.set("command", lastCommand);
-    if (!Firebase.RTDB.updateNode(&fbdo, "/home/floor_1/garage", &json)) {
-      Serial.print("Lỗi ghi trạng thái cửa: ");
-      Serial.println(fbdo.errorReason());
-    }
+    // Ghi trạng thái sau khi motor đã dừng
+    statusDirty = true;
+    if (fromButton) statusHasCommand = true;
+    lastStatusTry = 0;
+    statusFails = 0;
   }
+  syncDoorStatus();
 }
 
 void rollUp() {
